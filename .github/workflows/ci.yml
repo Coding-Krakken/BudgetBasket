@@ -50,8 +50,8 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Run database migrations
-        run: npx prisma migrate deploy
+      - name: Apply database schema
+        run: npx prisma db push
 
       - name: Lint
         run: npm run lint
@@ -61,6 +61,9 @@ jobs:
 
       - name: Unit & Integration Tests
         run: npm test
+
+      - name: Database Integration Tests
+        run: npm run test:integration
 
       - name: Build
         run: npm run build

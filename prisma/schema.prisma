@@ -147,6 +147,7 @@ model Product {
   weeklyAdDeals   WeeklyAdDeal[]
   cartPlanItems   CartPlanItem[]
   pantryItems     PantryItem[]
+  priceAlerts     PriceAlert[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -359,6 +360,8 @@ model CartPlan {
   explanationSummary    String?
   warnings              String[]         @default([])
   isSaved               Boolean          @default(false)
+  shareToken            String?          @unique
+  shareExpiresAt        DateTime?
   expiresAt             DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
@@ -366,6 +369,7 @@ model CartPlan {
 
   @@index([userId])
   @@index([createdAt])
+  @@index([shareToken])
 }
 
 model CartPlanItem {
@@ -511,4 +515,58 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model NotificationPreference {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  dealAlerts          Boolean  @default(true)
+  expiryReminders     Boolean  @default(true)
+  rebateReminders     Boolean  @default(true)
+  priceDropAlerts     Boolean  @default(true)
+  emailEnabled        Boolean  @default(false)
+  email               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  title       String
+  body        String?
+  link        String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// ─── Price Alerts ─────────────────────────────────────────────────────────────
+
+enum PriceAlertType {
+  BELOW_PRICE
+  ON_SALE
+  HISTORIC_LOW
+}
+
+model PriceAlert {
+  id            String         @id @default(cuid())
+  userId        String
+  productId     String
+  product       Product        @relation(fields: [productId], references: [id])
+  alertType     PriceAlertType @default(BELOW_PRICE)
+  targetPrice   Float?
+  isActive      Boolean        @default(true)
+  lastTriggered DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([userId, productId, alertType])
+  @@index([userId])
+  @@index([productId])
 }

@@ -189,6 +189,75 @@ async function main() {
   }
   console.log(`  ✓ ${Object.keys(products).length} products`);
 
+  // ─── UPCs ──────────────────────────────────────────────────────────────────
+  const upcData: Array<{ slug: string; upc: string }> = [
+    { slug: "whole-milk-gallon",        upc: "04125011793" },
+    { slug: "2-percent-milk-gallon",    upc: "04125011800" },
+    { slug: "butter-salted-1lb",        upc: "07041800000" },
+    { slug: "cheddar-cheese-block-8oz", upc: "02113120000" },
+    { slug: "sour-cream-16oz",          upc: "07117000000" },
+    { slug: "greek-yogurt-vanilla-32oz",upc: "08935800000" },
+    { slug: "eggs-large-dozen",         upc: "02700000001" },
+    { slug: "eggs-large-18ct",          upc: "02700000018" },
+    { slug: "chicken-breast-boneless",  upc: "02200200000" },
+    { slug: "ground-beef-80-20",        upc: "02300100000" },
+    { slug: "pork-chops-boneless",      upc: "02310100000" },
+    { slug: "salmon-fillet",            upc: "02400100000" },
+    { slug: "bacon-1lb",               upc: "07272300000" },
+    { slug: "bananas",                  upc: "04011000000" },
+    { slug: "apples-gala-3lb",          upc: "03338300000" },
+    { slug: "strawberries-1lb",         upc: "03116200000" },
+    { slug: "broccoli-crown",           upc: "03227600000" },
+    { slug: "baby-carrots-1lb",         upc: "07105900000" },
+    { slug: "russet-potatoes-5lb",      upc: "03204900000" },
+    { slug: "avocados-4ct",             upc: "03338400000" },
+    { slug: "cheerios-18oz",            upc: "01600027527" },
+    { slug: "frosted-flakes-19oz",      upc: "03800012929" },
+    { slug: "instant-oatmeal-variety",  upc: "01600011000" },
+    { slug: "honey-bunches-of-oats-18oz", upc: "08437600000" },
+    { slug: "lays-classic-chips-9oz",   upc: "02840027800" },
+    { slug: "oreos-14oz",               upc: "04400001222" },
+    { slug: "goldfish-crackers-30oz",   upc: "01410003800" },
+    { slug: "toothpaste-crest-65oz",    upc: "03700017800" },
+    { slug: "shampoo-pantene-12oz",     upc: "03700094350" },
+    { slug: "dove-soap-bar-4ct",        upc: "01111026000" },
+    { slug: "axe-deodorant-3oz",        upc: "07934900000" },
+    { slug: "bandaids-assorted-90ct",   upc: "03810002990" },
+    { slug: "tide-pods-32ct",           upc: "03700080898" },
+    { slug: "laundry-detergent-liquid-64oz", upc: "07817200000" },
+    { slug: "dawn-dish-soap-24oz",      upc: "03700045100" },
+    { slug: "windex-glass-cleaner-23oz",upc: "04675400000" },
+    { slug: "lysol-spray-19oz",         upc: "01900062200" },
+    { slug: "paper-towels-bounty-8pk",  upc: "03700008006" },
+    { slug: "toilet-paper-charmin-12pk",upc: "03700080888" },
+    { slug: "kleenex-tissues-3pk",      upc: "03600056500" },
+    { slug: "coke-12pack",              upc: "04900002200" },
+    { slug: "pepsi-2liter",             upc: "01220000020" },
+    { slug: "orange-juice-tropicana-52oz", upc: "04850000000" },
+    { slug: "water-case-16oz-24ct",     upc: "07840300000" },
+    { slug: "coffee-medium-roast-30oz", upc: "02550034050" },
+    { slug: "pasta-penne-16oz",         upc: "07611300000" },
+    { slug: "white-rice-5lb",           upc: "07447200000" },
+    { slug: "bread-whole-wheat-20oz",   upc: "07242500000" },
+    { slug: "olive-oil-16oz",           upc: "00754902000" },
+    { slug: "canned-tomatoes-14oz",     upc: "02400450000" },
+    { slug: "black-beans-canned-15oz",  upc: "02400480000" },
+    { slug: "peanut-butter-jif-40oz",   upc: "05150001040" },
+    { slug: "chicken-broth-32oz",       upc: "02400006080" },
+  ];
+  let upcCount = 0;
+  for (const u of upcData) {
+    const productId = products[u.slug];
+    if (!productId) continue;
+    await prisma.uPC.upsert({
+      where: { upc: u.upc },
+      update: {},
+      create: { upc: u.upc, productId, isDefault: true },
+    });
+    upcCount++;
+  }
+  console.log(`  ✓ ${upcCount} UPC codes`);
+
   // ─── Price Observations ────────────────────────────────────────────────────
   const priceObs = [
     // Walmart prices (generally lowest)

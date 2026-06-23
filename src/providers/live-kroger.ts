@@ -9,6 +9,31 @@ interface KrogerTokenResponse {
   expires_in?: number;
 }
 
+interface KrogerCartItem {
+  upc: string;
+  quantity: number;
+  modality?: string;
+}
+
+interface KrogerCartLineItem {
+  upc?: string;
+  quantity?: number;
+  price?: {
+    regular?: number;
+    promo?: number;
+  };
+}
+
+interface KrogerCartResponse {
+  data?: {
+    id?: string;
+    lineItems?: KrogerCartLineItem[];
+    totals?: {
+      subTotal?: number;
+    };
+  };
+}
+
 interface KrogerProductItem {
   productId?: string;
   upc?: string;
@@ -352,6 +377,59 @@ export class LiveKrogerProvider extends BaseProvider {
       isFeatured: true,
       termsAndConditions: offer.id ?? offer.offerId ? `Kroger offer reference: ${offer.id ?? offer.offerId}` : undefined,
     };
+  }
+
+  /**
+   * Simulate adding items to a Kroger cart to obtain CART_VALIDATED prices.
+   * Returns a map of UPC → cart-validated price.
+   * Requires a user-scoped access token (cart.basic:write scope); falls back
+   * gracefully if not available.
+   */
+  async simulateCart(
+    items: KrogerCartItem[],
+    locationId: string,
+    userToken: string
+  ): Promise<Map<string, number>> {
+    const priceMap = new Map<string, number>();
+
+    if (!items.length || !userToken || !locationId) return priceMap;
+
+    try {
+      await this.waitForRateLimit();
+
+      const response = await this.fetchImpl("https://api.kroger.com/v1/carts", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          items: items.map((i) => ({
+            upc: i.upc,
+            quantity: i.quantity,
+            modality: i.modality ?? "PICKUP",
+          })),
+          fulfillment: { storeId: locationId },
+        }),
+      });
+
+      if (!response.ok) return priceMap;
+
+      const cart = (await response.json()) as KrogerCartResponse;
+
+      for (const line of cart.data?.lineItems ?? []) {
+        if (!line.upc) continue;
+        const price = line.price?.promo ?? line.price?.regular;
+        if (typeof price === "number") {
+          priceMap.set(line.upc, price);
+        }
+      }
+    } catch {
+      // Cart simulation is best-effort; caller falls back to OFFICIAL_API prices
+    }
+
+    return priceMap;
   }
 
   private async waitForRateLimit() {

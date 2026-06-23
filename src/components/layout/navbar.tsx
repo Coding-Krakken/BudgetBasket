@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   ShoppingCart,
   Compass,
@@ -10,6 +11,7 @@ import {
   User,
   Settings,
   Sparkles,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -23,8 +25,24 @@ const navItems = [
   { href: "/profile", label: "Profile", icon: User },
 ];
 
+function useUnreadNotificationCount() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const userId = localStorage.getItem("cartwise:userId");
+    if (!userId) return;
+    fetch(`/api/notifications?userId=${encodeURIComponent(userId)}&unreadOnly=true&limit=1`)
+      .then((r) => r.json())
+      .then((j) => { if (j.success) setCount(j.meta.unreadCount); })
+      .catch(() => undefined);
+  }, []);
+
+  return count;
+}
+
 export function NavBar() {
   const pathname = usePathname();
+  const unreadCount = useUnreadNotificationCount();
 
   return (
     <>
@@ -67,6 +85,18 @@ export function NavBar() {
 
           <div className="flex items-center gap-2">
             <Link
+              href="/notifications"
+              className="relative hidden md:flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Notifications"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </Link>
+            <Link
               href="/admin/providers"
               className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
@@ -99,6 +129,21 @@ export function NavBar() {
               </Link>
             );
           })}
+          <Link
+            href="/notifications"
+            className={cn(
+              "relative flex flex-col items-center gap-0.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors min-w-[3rem]",
+              pathname === "/notifications" ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            <Bell className={cn("h-5 w-5", pathname === "/notifications" && "text-primary")} />
+            {unreadCount > 0 && (
+              <span className="absolute top-0.5 right-1.5 h-3.5 w-3.5 rounded-full bg-primary text-[8px] font-bold text-primary-foreground flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+            Alerts
+          </Link>
         </div>
       </nav>
 

@@ -5,6 +5,7 @@
 CartWise AI is an open-source grocery savings platform that finds the best prices across stores, stacks coupons and rebates intelligently, and helps you save money on every shopping trip — while being honest about what's verified and what's estimated.
 
 [![CI](https://github.com/Coding-Krakken/BudgetBasket/actions/workflows/ci.yml/badge.svg)](https://github.com/Coding-Krakken/BudgetBasket/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-target%2080%25-brightgreen.svg)](docs/TESTING_STRATEGY.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -146,10 +147,12 @@ npm run start        # Start production server
 npm run lint         # ESLint
 npm run typecheck    # TypeScript type checking
 npm run test         # Run unit tests (Vitest)
+npm run test:integration # Run PostgreSQL-backed integration tests
 npm run test:e2e     # Run e2e tests (Playwright)
 
 npm run db:generate  # Generate Prisma client
 npm run db:migrate   # Run database migrations
+npm run db:push      # Push schema to local/test database
 npm run db:seed      # Seed demo data
 
 docker compose up -d        # Start app + database
@@ -160,17 +163,18 @@ docker compose down         # Stop containers
 
 ## Testing
 
-The MVP includes **62 passing unit tests** covering:
+The MVP includes unit, integration, and e2e coverage:
 
-- `src/engine/parser.test.ts` — Shopping list parsing + Jaccard similarity (18 tests)
-- `src/engine/confidence.test.ts` — Confidence scoring system (15 tests)
-- `src/engine/effective-price.test.ts` — Coupon stacking calculator (14 tests)
-- `src/engine/optimizer.test.ts` — Basket optimizer + product matching (15 tests)
+- `src/engine/*.test.ts` — parser, confidence, effective price, and optimizer unit tests
+- `src/providers/*.test.ts` — provider contract and sync unit tests
+- `src/**/*.integration.test.ts` — API route and provider sync tests against PostgreSQL
+- `tests/e2e/*.spec.ts` — browser smoke coverage for the planner
 
 Run tests:
 ```bash
-npm run test              # All unit tests
-npm run test -- --ui      # Interactive test UI
+npm run test              # Unit tests
+npm run test:integration  # Requires DATABASE_URL and an applied Prisma schema
+npm run test:e2e          # Browser tests
 ```
 
 ---

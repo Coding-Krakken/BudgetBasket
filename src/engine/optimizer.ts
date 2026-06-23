@@ -254,7 +254,7 @@ export async function optimizeBasket(input: OptimizeInput): Promise<Optimization
 
     // Suggest a better-unit-price alternative when substitutions are enabled
     if (preferences?.allowSubstitutions) {
-      const sub = findSubstitution(item, product, best, products, allowedStores, opportunities, priceMap, mode, hassle, usedStoreIds);
+      const sub = findSubstitution(item, product, best, products, allowedStores, opportunities, priceMap, mode);
       if (sub) items.push(sub);
     }
   }
@@ -643,9 +643,7 @@ function findSubstitution(
   allowedStores: Store[],
   opportunities: Opportunity[],
   priceMap: Map<string, Map<string, PriceObservationInput>>,
-  mode: OptimizationMode,
-  hassle: number,
-  usedStoreIds: Set<string>
+  mode: OptimizationMode
 ): CartPlanItem | null {
   // Only useful when we can compare unit prices
   if (!originalCandidate.unitPrice) return null;

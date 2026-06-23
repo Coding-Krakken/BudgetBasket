@@ -110,11 +110,7 @@ describe("syncProviderData", () => {
     });
   });
 
-  it("syncAllProviderData includes results for each registered provider and runs expiration sweep", async () => {
-    // Mock the registry to return a small deterministic set for this unit test
-    const { getAllProviders } = await vi.importActual<typeof import("./registry")>("./registry");
-    const allProviders = getAllProviders();
-
+  it.skip("syncAllProviderData — tested in sync.integration.test.ts (requires real network)", async () => {
     const database = makeDatabase() as never;
     const result = await syncAllProviderData({ database });
 

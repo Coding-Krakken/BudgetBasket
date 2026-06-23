@@ -163,7 +163,7 @@ export class LiveRedditDealsProvider extends BaseProvider {
         normalizedName: "normalizedName" in p ? (p as typeof p & { normalizedName: string }).normalizedName : p.name,
       }));
 
-      const opportunities: ProviderOpportunityData[] = allPosts.map((post) => {
+      const opportunities: ProviderOpportunityData[] = allPosts.flatMap((post) => {
         const dollarAmount = parseDollarAmount(post.title);
         const percentOff = parsePercentOff(post.title);
         const searchText = `${post.title} ${post.selftext}`;
@@ -182,14 +182,13 @@ export class LiveRedditDealsProvider extends BaseProvider {
           valueAmount = dollarAmount;
         } else if (percentOff !== null) {
           valueType = "PERCENT_OFF";
-          valueAmount = 0;
+          valueAmount = percentOff / 100;
           valuePercent = percentOff;
         } else {
-          valueType = "FLAT_DISCOUNT";
-          valueAmount = 0;
+          return [];
         }
 
-        return {
+        return [{
           type: guessOpportunityType(post.title),
           title: post.title,
           description: post.selftext.slice(0, 200) || undefined,
@@ -203,7 +202,7 @@ export class LiveRedditDealsProvider extends BaseProvider {
           confidence: 0.55,
           expiresAt,
           isFeatured: false,
-        };
+        }];
       });
 
       return this.success(opportunities);

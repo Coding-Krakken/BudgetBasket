@@ -80,7 +80,7 @@ export class LiveHip2SaveProvider extends BaseProvider {
         normalizedName: "normalizedName" in p ? (p as typeof p & { normalizedName: string }).normalizedName : p.name,
       }));
 
-      const opportunities: ProviderOpportunityData[] = items.map((item) => {
+      const opportunities: ProviderOpportunityData[] = items.flatMap((item) => {
         const dollarAmount = parseDollarAmount(item.title);
         const percentOff = parsePercentOff(item.title);
         const searchText = `${item.title} ${item.description}`;
@@ -96,14 +96,13 @@ export class LiveHip2SaveProvider extends BaseProvider {
           valueAmount = dollarAmount;
         } else if (percentOff !== null) {
           valueType = "PERCENT_OFF";
-          valueAmount = 0;
+          valueAmount = percentOff / 100;
           valuePercent = percentOff;
         } else {
-          valueType = "FLAT_DISCOUNT";
-          valueAmount = 0;
+          return [];
         }
 
-        return {
+        return [{
           type: guessOpportunityType(item.title),
           title: item.title,
           description: item.description.slice(0, 300) || undefined,
@@ -117,7 +116,7 @@ export class LiveHip2SaveProvider extends BaseProvider {
           confidence: 0.60,
           expiresAt,
           isFeatured: false,
-        };
+        }];
       });
 
       return this.success(opportunities);

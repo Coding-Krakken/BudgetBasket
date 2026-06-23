@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { parseShoppingList } from "@/engine/parser";
-import { createOptimizationResult, generateScenarios } from "@/engine/optimizer";
+import { createOptimizationResult, generateScenarios, getEligibilityTrace } from "@/engine/optimizer";
+import { logger } from "@/lib/logger";
+import { rateLimit, getRateLimitHeaders } from "@/lib/rate-limit";
 import type { OptimizationMode, OptimizeRequest } from "@/types";
 import { z } from "zod";
 
@@ -12,6 +14,7 @@ const OptimizeSchema = z.object({
     .enum(["CHEAPEST", "ONE_STORE", "FASTEST", "BEST_VERIFIED", "STOCK_UP"])
     .default("CHEAPEST"),
   maxStores: z.number().min(1).max(10).optional(),
+  debug: z.boolean().optional(),
   preferences: z
     .object({
       allowSubstitutions: z.boolean().optional(),
@@ -22,15 +25,34 @@ const OptimizeSchema = z.object({
     .optional(),
 });
 
-export async function POST(request: NextRequest) {
-  let body: OptimizeRequest;
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown"
+  );
+}
 
+export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const rl = rateLimit(`optimize:${ip}`, 20, 60_000);
+  const rlHeaders = getRateLimitHeaders(rl);
+
+  if (!rl.allowed) {
+    logger.warn("Rate limit exceeded", { route: "optimize", ip });
+    return NextResponse.json(
+      { success: false, error: "Too many requests — please wait a moment and try again." },
+      { status: 429, headers: rlHeaders }
+    );
+  }
+
+  let body: OptimizeRequest;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json(
       { success: false, error: "Invalid JSON body" },
-      { status: 400 }
+      { status: 400, headers: rlHeaders }
     );
   }
 
@@ -42,23 +64,23 @@ export async function POST(request: NextRequest) {
         error: "Invalid request",
         details: parsed.error.flatten(),
       },
-      { status: 422 }
+      { status: 422, headers: rlHeaders }
     );
   }
 
-  const { shoppingList, storeIds, mode, preferences } = parsed.data;
+  const { shoppingList, storeIds, mode, preferences, debug } = parsed.data;
+  const debugMode = debug === true && process.env.NODE_ENV !== "production";
+  const t0 = Date.now();
 
   try {
-    // Parse the shopping list
     const parsedItems = parseShoppingList(shoppingList);
     if (parsedItems.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Could not parse any items from shopping list" },
-        { status: 422 }
+        { success: false, error: "Could not parse any items from shopping list. Please enter items separated by commas or new lines." },
+        { status: 422, headers: rlHeaders }
       );
     }
 
-    // Fetch relevant data from DB
     const [stores, products, opportunities, priceObservations] = await Promise.all([
       db.store.findMany({
         where: {
@@ -97,8 +119,14 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    // Generate all scenarios
-    const scenarios = await generateScenarios({
+    if (stores.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "No active stores found. Please check your store configuration." },
+        { status: 503, headers: rlHeaders }
+      );
+    }
+
+    const optimizeInput = {
       parsedItems,
       products: products as never,
       stores: stores as never,
@@ -106,7 +134,9 @@ export async function POST(request: NextRequest) {
       priceObservations,
       mode: mode as OptimizationMode,
       preferences,
-    });
+    };
+
+    const scenarios = await generateScenarios(optimizeInput);
 
     const result = createOptimizationResult(
       shoppingList,
@@ -115,12 +145,47 @@ export async function POST(request: NextRequest) {
       mode as OptimizationMode
     );
 
-    return NextResponse.json({ success: true, data: result });
+    const durationMs = Date.now() - t0;
+    const primary = result.primaryScenario;
+    const matchedCount = primary.items.filter(i => i.product).length;
+
+    logger.info("optimization_completed", {
+      mode,
+      itemCount: parsedItems.length,
+      matchedCount,
+      storeCount: primary.storeCount,
+      totalSavings: primary.totalSavings.toFixed(2),
+      confidence: primary.overallConfidence.toFixed(2),
+      durationMs,
+    });
+
+    const responseBody: Record<string, unknown> = { success: true, data: result };
+
+    if (debugMode) {
+      responseBody.debug = {
+        eligibilityTrace: getEligibilityTrace(
+          parsedItems,
+          products as never,
+          opportunities as never
+        ),
+        queriedStores: stores.length,
+        queriedProducts: products.length,
+        queriedOpportunities: opportunities.length,
+        durationMs,
+      };
+    }
+
+    return NextResponse.json(responseBody, { headers: rlHeaders });
   } catch (error) {
-    console.error("Optimization error:", error);
+    const durationMs = Date.now() - t0;
+    logger.error("optimization_failed", {
+      error: error instanceof Error ? error.message : String(error),
+      mode,
+      durationMs,
+    });
     return NextResponse.json(
       { success: false, error: "Optimization failed. Please try again." },
-      { status: 500 }
+      { status: 500, headers: rlHeaders }
     );
   }
 }

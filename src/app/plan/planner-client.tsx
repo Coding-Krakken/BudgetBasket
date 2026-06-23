@@ -117,20 +117,27 @@ export function PlannerClient({ stores }: PlannerClientProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <Textarea
+            id="shopping-list-input"
             value={shoppingList}
             onChange={e => setShoppingList(e.target.value)}
             placeholder="milk, eggs, chicken breast, Cheerios, bananas, toothpaste, laundry detergent..."
             className="min-h-[120px] resize-none"
+            aria-label="Shopping list"
+            aria-describedby="shopping-list-hint"
           />
+          <p id="shopping-list-hint" className="sr-only">
+            Enter grocery items separated by commas or new lines. Include quantities if needed.
+          </p>
 
           {/* Demo list suggestions */}
-          <div className="flex flex-wrap gap-2">
-            <span className="text-xs text-muted-foreground self-center">Try:</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Example shopping lists">
+            <span className="text-xs text-muted-foreground self-center" aria-hidden="true">Try:</span>
             {DEMO_LISTS.map((list, i) => (
               <button
                 key={i}
                 onClick={() => setShoppingList(list)}
                 className="text-xs px-2 py-1 rounded-full border bg-muted hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                aria-label={`Load demo shopping list ${i + 1}`}
               >
                 Demo list {i + 1}
               </button>
@@ -138,8 +145,8 @@ export function PlannerClient({ stores }: PlannerClientProps) {
           </div>
 
           {/* Optimization Mode */}
-          <div>
-            <p className="text-sm font-medium mb-2">Optimization Mode</p>
+          <div role="group" aria-labelledby="mode-label">
+            <p id="mode-label" className="text-sm font-medium mb-2">Optimization Mode</p>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {MODES.map(m => {
                 const Icon = m.icon;
@@ -147,6 +154,8 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                   <button
                     key={m.value}
                     onClick={() => setMode(m.value)}
+                    aria-pressed={mode === m.value}
+                    aria-label={`${m.label} — ${m.desc}`}
                     className={cn(
                       "flex flex-col items-center gap-1 p-2.5 rounded-lg border text-center transition-all",
                       mode === m.value
@@ -154,7 +163,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                         : "border-border hover:border-primary/40 hover:bg-muted"
                     )}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-4 w-4" aria-hidden="true" />
                     <span className="text-xs font-medium leading-tight">{m.label}</span>
                     <span className="text-[10px] text-muted-foreground leading-tight hidden sm:block">{m.desc}</span>
                   </button>
@@ -169,28 +178,70 @@ export function PlannerClient({ stores }: PlannerClientProps) {
               disabled={loading || !shoppingList.trim()}
               size="lg"
               className="flex-1 sm:flex-none"
+              aria-busy={loading}
             >
               {loading ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Optimizing...</>
+                <><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> <span>Optimizing...</span></>
               ) : (
-                <><TrendingDown className="h-4 w-4" /> Optimize My List</>
+                <><TrendingDown className="h-4 w-4" aria-hidden="true" /> <span>Optimize My List</span></>
               )}
             </Button>
             {result && (
-              <Button variant="outline" onClick={() => { setResult(null); setShoppingList(""); }}>
+              <Button variant="outline" onClick={() => { setResult(null); setShoppingList(""); }} aria-label="Clear results and start over">
                 Clear
               </Button>
             )}
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-sm text-destructive p-3 rounded-lg bg-destructive/10">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error}
+            <div className="flex items-start gap-2 text-sm text-destructive p-3 rounded-lg bg-destructive/10">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p>{error}</p>
+                <button
+                  onClick={handleOptimize}
+                  className="mt-1.5 underline text-xs opacity-80 hover:opacity-100"
+                >
+                  Try again
+                </button>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="space-y-4" aria-label="Loading optimization results">
+          <Card className="border-2 border-primary/10">
+            <CardContent className="p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+                    <div className="h-6 w-24 bg-muted animate-pulse rounded" />
+                  </div>
+                ))}
+              </div>
+              <div className="h-4 w-48 bg-muted animate-pulse rounded" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 py-2">
+                  <div className="h-8 w-8 bg-muted animate-pulse rounded-full" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+                    <div className="h-3 w-48 bg-muted animate-pulse rounded" />
+                  </div>
+                  <div className="h-5 w-16 bg-muted animate-pulse rounded" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Results */}
       {result && primaryScenario && (
@@ -225,6 +276,24 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                     {primaryScenario.stores.map(s => s.name).join(", ") || "None matched"}
                   </span>
                 </div>
+                {(() => {
+                  const matched = primaryScenario.items.filter(i => i.product).length;
+                  const total = primaryScenario.items.length;
+                  if (matched < total) {
+                    return (
+                      <div className="flex items-center gap-1.5 text-amber-600">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <span>{matched}/{total} items matched — {total - matched} not found in catalog</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center gap-1.5 text-emerald-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>All {total} items matched</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {primaryScenario.warnings.length > 0 && (

@@ -137,3 +137,61 @@ describe("getEligibleOpportunities", () => {
     expect(result).toHaveLength(0);
   });
 });
+
+import { getEligibilityTrace } from "./optimizer";
+
+describe("getEligibilityTrace", () => {
+  it("returns one entry per parsed item", () => {
+    const items = [
+      { raw: "milk", normalized: "milk", quantity: 1 },
+      { raw: "eggs", normalized: "eggs", quantity: 1 },
+    ];
+    const trace = getEligibilityTrace(items, PRODUCTS, []);
+    expect(trace).toHaveLength(2);
+    expect(trace[0].itemRaw).toBe("milk");
+    expect(trace[1].itemRaw).toBe("eggs");
+  });
+
+  it("populates matchedProducts for recognized items", () => {
+    const items = [{ raw: "milk", normalized: "milk", quantity: 1 }];
+    const trace = getEligibilityTrace(items, PRODUCTS, []);
+    expect(trace[0].matchedProducts.length).toBeGreaterThan(0);
+    expect(trace[0].matchedProducts[0].productId).toBe("p1");
+  });
+
+  it("returns empty matchedProducts for unrecognized item", () => {
+    const items = [{ raw: "xyzzy123", normalized: "xyzzy123", quantity: 1 }];
+    const trace = getEligibilityTrace(items, PRODUCTS, []);
+    expect(trace[0].matchedProducts).toHaveLength(0);
+  });
+
+  it("marks expired opportunities as excluded", () => {
+    const items = [{ raw: "milk", normalized: "milk", quantity: 1 }];
+    const expired = baseOpp({
+      id: "exp-opp",
+      productId: "p1",
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    const trace = getEligibilityTrace(items, PRODUCTS, [expired]);
+    const entry = trace[0].opportunities.find(o => o.opportunityId === "exp-opp");
+    expect(entry?.excluded).toBe(true);
+    expect(entry?.reason).toBe("Expired");
+  });
+
+  it("marks inactive opportunities as excluded", () => {
+    const items = [{ raw: "milk", normalized: "milk", quantity: 1 }];
+    const inactive = baseOpp({ id: "inactive-opp", productId: "p1", isActive: false });
+    const trace = getEligibilityTrace(items, PRODUCTS, [inactive]);
+    const entry = trace[0].opportunities.find(o => o.opportunityId === "inactive-opp");
+    expect(entry?.excluded).toBe(true);
+    expect(entry?.reason).toBe("Inactive");
+  });
+
+  it("marks eligible opportunities as not excluded", () => {
+    const items = [{ raw: "milk", normalized: "milk", quantity: 1 }];
+    const eligible = baseOpp({ id: "good-opp", productId: "p1", isActive: true, expiresAt: null });
+    const trace = getEligibilityTrace(items, PRODUCTS, [eligible]);
+    const entry = trace[0].opportunities.find(o => o.opportunityId === "good-opp");
+    expect(entry?.excluded).toBe(false);
+  });
+});

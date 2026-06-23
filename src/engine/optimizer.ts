@@ -12,6 +12,56 @@ import { extractKeywords, itemSimilarity } from "./parser";
 import { calculateEffectivePrice } from "./effective-price";
 import { combineConfidence, scoreConfidence } from "./confidence";
 
+// ─── Debug / Eligibility Trace ───────────────────────────────────────────────
+
+export interface EligibilityTraceEntry {
+  itemRaw: string;
+  matchedProducts: Array<{ productId: string; productName: string; confidence: number }>;
+  opportunities: Array<{
+    opportunityId: string;
+    title: string;
+    excluded: boolean;
+    reason?: string;
+  }>;
+}
+
+export function getEligibilityTrace(
+  parsedItems: ShoppingListItem[],
+  products: Product[],
+  opportunities: Opportunity[]
+): EligibilityTraceEntry[] {
+  return parsedItems.map(item => {
+    const matches = matchProducts(item, products);
+    const product = matches[0]?.product ?? null;
+
+    const oppTrace = opportunities.map(opp => {
+      if (!product) {
+        return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "No product match" };
+      }
+
+      const now = new Date();
+      if (!opp.isActive) return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "Inactive" };
+      if (opp.expiresAt && new Date(opp.expiresAt) < now) return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "Expired" };
+      if (opp.startsAt && new Date(opp.startsAt) > now) return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "Not started yet" };
+      if (opp.productId && opp.productId !== product.id) return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "Different product" };
+      if (!opp.productId && opp.categorySlug && product.category?.slug !== opp.categorySlug) return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "Different category" };
+      if (opp.brandSlug && product.brand?.slug !== opp.brandSlug) return { opportunityId: opp.id, title: opp.title, excluded: true, reason: "Different brand" };
+
+      return { opportunityId: opp.id, title: opp.title, excluded: false };
+    });
+
+    return {
+      itemRaw: item.raw,
+      matchedProducts: matches.slice(0, 3).map(m => ({
+        productId: m.product.id,
+        productName: m.product.name,
+        confidence: m.confidence,
+      })),
+      opportunities: oppTrace,
+    };
+  });
+}
+
 const HASSLE_COST_PER_EXTRA_STORE = 5.00;
 const CONFIDENCE_PENALTY_PER_LOW = 0.05;
 
@@ -212,9 +262,11 @@ function buildStoreCandidates(
 
   for (const store of stores) {
     const priceObs = priceMap.get(product.id)?.get(store.id);
-    if (!priceObs && !product.averagePrice) continue;
-
     const basePrice = priceObs?.price ?? product.averagePrice ?? 0;
+
+    // Skip if we have no usable price at all
+    if (basePrice <= 0) continue;
+
     const salePrice = priceObs?.salePrice;
     const obsConfidence = priceObs?.confidence ?? 0.40;
 

@@ -13,7 +13,6 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2017",
-    "downlevelIteration": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

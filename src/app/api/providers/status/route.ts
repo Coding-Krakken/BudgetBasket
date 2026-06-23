@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { getProviderHealthSummary } from "@/providers/registry";
+import { getProviderHealthSummaryFromDb } from "@/providers/registry";
 import db from "@/lib/db";
+import { logger } from "@/lib/logger";
 
 export async function GET() {
   try {
-    const providerHealth = getProviderHealthSummary();
+    // DB-backed summary with real opportunity counts and sync timestamps
+    const providerHealth = await getProviderHealthSummaryFromDb();
 
-    // Enrich with recent sync run data
+    // Enrich with last sync run details (status, error)
     const syncRuns = await db.providerSyncRun.findMany({
       orderBy: { startedAt: "desc" },
       take: 50,
@@ -23,7 +25,6 @@ export async function GET() {
       const lastRun = syncByProvider.get(p.providerId);
       return {
         ...p,
-        lastSyncAt: lastRun?.completedAt ?? p.lastSyncAt,
         lastSyncStatus: lastRun?.status ?? null,
         lastSyncItemsIngested: lastRun?.itemsIngested ?? 0,
         lastSyncError: lastRun?.errorMessage ?? null,
@@ -47,7 +48,9 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error("Providers status error:", error);
+    logger.error("providers_status_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { success: false, error: "Failed to fetch provider status" },
       { status: 500 }

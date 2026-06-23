@@ -2,9 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: process.env.DOCKER_BUILD === "true" ? "standalone" : undefined,
-  experimental: {
-    typedRoutes: false,
-  },
+  typedRoutes: false,
+  allowedDevOrigins: ["192.168.1.170"],
   images: {
     remotePatterns: [],
   },

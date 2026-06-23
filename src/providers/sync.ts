@@ -6,7 +6,7 @@ import {
 } from "@prisma/client";
 import db from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { getProvider } from "./registry";
+import { getAllProviders, getProvider } from "./registry";
 import type { ProviderFetchResult } from "@/types";
 import type { ProviderOpportunityData, ProviderPriceData } from "./base";
 
@@ -205,6 +205,81 @@ export async function syncProviderData(
   }
 }
 
+export interface ExpirationSweepResult {
+  expiredOpportunities: number;
+  expiredPriceObservations: number;
+}
+
+export async function expireStaleOfferData(
+  options: { database?: Pick<PrismaClient, "opportunity" | "priceObservation">; now?: Date } = {}
+): Promise<ExpirationSweepResult> {
+  const database = options.database ?? db;
+  const now = options.now ?? new Date();
+
+  const [opportunities, priceObservations] = await Promise.all([
+    database.opportunity.updateMany({
+      where: {
+        isActive: true,
+        expiresAt: { lt: now },
+      },
+      data: { isActive: false },
+    }),
+    database.priceObservation.updateMany({
+      where: {
+        isActive: true,
+        expiresAt: { lt: now },
+      },
+      data: { isActive: false },
+    }),
+  ]);
+
+  return {
+    expiredOpportunities: opportunities.count,
+    expiredPriceObservations: priceObservations.count,
+  };
+}
+
+export interface ProviderSyncAllResult {
+  startedAt: string;
+  completedAt: string;
+  expirationSweep: ExpirationSweepResult;
+  results: ProviderSyncResult[];
+  consecutiveFailureAlerts: ProviderFailureAlert[];
+}
+
+export interface ProviderFailureAlert {
+  providerId: string;
+  providerName: string;
+  failedRuns: number;
+}
+
+export async function syncAllProviderData(
+  options: { database?: SyncDbClient; now?: Date } = {}
+): Promise<ProviderSyncAllResult> {
+  const database = options.database ?? db;
+  const startedAt = new Date();
+  const expirationSweep = await expireStaleOfferData({ database, now: options.now });
+  const providerIds = getAllProviders()
+    .filter(provider => provider.capabilities.prices || provider.capabilities.opportunities)
+    .map(provider => provider.id);
+
+  const results: ProviderSyncResult[] = [];
+  for (const providerId of providerIds) {
+    results.push(await syncProviderData(providerId, { database }));
+  }
+
+  const consecutiveFailureAlerts = await getConsecutiveFailureAlerts(database);
+  const completedAt = new Date();
+
+  return {
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    expirationSweep,
+    results,
+    consecutiveFailureAlerts,
+  };
+}
+
 function emptyFetchResult<T>(providerId: string): ProviderFetchResult<T> {
   return {
     providerId,
@@ -231,4 +306,33 @@ function toStackabilityRule(rule?: string): StackabilityRule {
   return rule && Object.values(StackabilityRule).includes(rule as StackabilityRule)
     ? (rule as StackabilityRule)
     : StackabilityRule.STANDALONE;
+}
+
+async function getConsecutiveFailureAlerts(
+  database: Pick<PrismaClient, "providerSyncRun">
+): Promise<ProviderFailureAlert[]> {
+  const providers = getAllProviders();
+  const alerts: ProviderFailureAlert[] = [];
+
+  for (const provider of providers) {
+    const recentRuns = await database.providerSyncRun.findMany({
+      where: { providerId: provider.id },
+      orderBy: { startedAt: "desc" },
+      take: 3,
+    });
+
+    if (recentRuns.length === 3 && recentRuns.every(run => run.status === "FAILED")) {
+      alerts.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        failedRuns: recentRuns.length,
+      });
+    }
+  }
+
+  if (alerts.length > 0) {
+    logger.error("provider_sync_consecutive_failures", { alerts });
+  }
+
+  return alerts;
 }

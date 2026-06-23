@@ -1,0 +1,67 @@
+[
+  {
+    "providerName": "Ibotta",
+    "title": "Ibotta: $0.75 Cash Back on Any Milk",
+    "description": "Earn cash back when you buy any brand of milk and submit a receipt.",
+    "productSlug": "whole-milk-gallon",
+    "categorySlug": "dairy",
+    "valueType": "CASH_BACK",
+    "valueAmount": 0.75,
+    "validDays": 30,
+    "isFeatured": true
+  },
+  {
+    "providerName": "Ibotta",
+    "title": "Ibotta: $2.00 Back on Tide Pods 32ct",
+    "description": "Earn cash back on Tide Pods after purchase.",
+    "productSlug": "tide-pods-32ct",
+    "valueType": "CASH_BACK",
+    "valueAmount": 2,
+    "validDays": 30,
+    "isFeatured": true
+  },
+  {
+    "providerName": "Ibotta",
+    "title": "Ibotta: $1.00 Back on Bananas",
+    "description": "Any-store produce rebate for bananas.",
+    "productSlug": "bananas",
+    "valueType": "CASH_BACK",
+    "valueAmount": 1,
+    "validDays": 30
+  },
+  {
+    "providerName": "Ibotta",
+    "title": "Ibotta: $1.50 Back on Peanut Butter 28oz+",
+    "description": "Earn cash back on qualifying peanut butter.",
+    "productSlug": "peanut-butter-jif-40oz",
+    "valueType": "CASH_BACK",
+    "valueAmount": 1.5,
+    "validDays": 30
+  },
+  {
+    "providerName": "Fetch",
+    "title": "Fetch: 3,000 Points on Cheerios",
+    "description": "Earn points on any Cheerios purchase by scanning your receipt.",
+    "productSlug": "cheerios-18oz",
+    "valueType": "POINTS",
+    "valueAmount": 0.3,
+    "validDays": 30
+  },
+  {
+    "providerName": "Fetch",
+    "title": "Fetch: 2,500 Points on Tide Pods",
+    "description": "Earn Fetch points after buying Tide products.",
+    "productSlug": "tide-pods-32ct",
+    "valueType": "POINTS",
+    "valueAmount": 0.25,
+    "validDays": 30
+  },
+  {
+    "providerName": "Fetch",
+    "title": "Fetch: 5,000 Points on Any Receipt $30+",
+    "description": "Bonus offer for any qualifying grocery receipt.",
+    "valueType": "RECEIPT_BONUS_POINTS",
+    "valueAmount": 0.5,
+    "validDays": 30
+  }
+]

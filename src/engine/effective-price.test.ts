@@ -90,7 +90,7 @@ describe("calculateEffectivePrice", () => {
       ...baseOpportunity,
       id: "ibotta-rebate",
       type: "REBATE",
-      providerId: "seed-ibotta",
+      providerId: "live-ibotta",
       valueType: "CASH_BACK",
       valueAmount: 1,
       requiresReceipt: true,

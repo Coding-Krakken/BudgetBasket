@@ -170,9 +170,10 @@ export function calculateEffectivePrice(
 
 function formatProviderName(providerId: string): string {
   const providerNames: Record<string, string> = {
-    "seed-ibotta": "Ibotta",
+    "live-ibotta": "Ibotta",
     "live-ibotta-api": "Ibotta",
-    "seed-fetch": "Fetch Rewards",
+    "live-ibotta-performance": "Ibotta Performance",
+    "live-fetch-rewards": "Fetch Rewards",
   };
 
   return providerNames[providerId] ?? providerId;

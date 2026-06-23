@@ -14,6 +14,33 @@ The MVP uses seed/demo providers only. No real API calls are made in production.
 
 ---
 
+## Credential Vault Pattern
+
+Real providers must read secrets through `CredentialStore`; provider code should not call `process.env` directly for credentials. The default implementation is `EnvCredentialStore`, which maps provider IDs and credential types to environment variables:
+
+| Provider ID | Credential type | Environment variable |
+| --- | --- | --- |
+| `live-kroger-api` | `client_id` | `KROGER_CLIENT_ID` |
+| `live-kroger-api` | `client_secret` | `KROGER_CLIENT_SECRET` |
+| `live-walmart-api` | `api_key` | `WALMART_API_KEY` |
+| `live-ibotta-api` | `client_id` | `IBOTTA_CLIENT_ID` |
+| `live-ibotta-api` | `client_secret` | `IBOTTA_CLIENT_SECRET` |
+
+Supported credential types are `client_id`, `client_secret`, `api_key`, and `oauth_access_token`.
+
+Provider registration should be credential-aware:
+
+- Register seed/demo providers by default.
+- Register live providers only when their required credentials are present.
+- Return a graceful provider failure when a live provider is invoked without credentials.
+- Never persist provider API credentials in source code or plaintext database columns.
+
+The structured logger redacts known provider credential values before writing development or production log output. New providers must add their credential requirements to the logger redaction list when they add new secret environment variables.
+
+Provider data sync is exposed through `POST /api/providers/sync/[id]`. In production this endpoint requires `PROVIDER_SYNC_SECRET` and a matching `Authorization: Bearer ...` header. A Kroger sync uses `live-kroger-api`, loads all catalog products, writes fresh `PriceObservation` rows, deactivates stale live rows from the same provider, maps coupon/promotion payloads into `Opportunity` rows, and records a `ProviderSyncRun`.
+
+---
+
 ## Provider Abstraction Layer
 
 ### BaseProvider (Abstract Class)

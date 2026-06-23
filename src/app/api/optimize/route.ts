@@ -162,6 +162,13 @@ export async function POST(request: NextRequest) {
     // Persist plan to database (best-effort; never fails the response)
     let planId: string | undefined;
     try {
+      const appliedExpirationTimes = primary.items
+        .flatMap(item => item.appliedOpportunities.map(ao => ao.expiresAt))
+        .filter((expiresAt): expiresAt is Date => Boolean(expiresAt))
+        .map(expiresAt => new Date(expiresAt).getTime());
+      const defaultPlanExpiration = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      const planExpiresAt = new Date(Math.min(defaultPlanExpiration, ...appliedExpirationTimes));
+
       const plan = await db.cartPlan.create({
         data: {
           rawInput: shoppingList,
@@ -179,7 +186,7 @@ export async function POST(request: NextRequest) {
           appliedRebateCount: primary.items.reduce(
             (n, i) => n + i.appliedOpportunities.filter(o => o.isFutureValue).length, 0
           ),
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          expiresAt: planExpiresAt,
           items: {
             create: primary.items.map(item => ({
               rawInput: item.raw,
@@ -194,6 +201,7 @@ export async function POST(request: NextRequest) {
               totalSavings: item.totalSavings,
               confidence: item.confidence,
               actionsRequired: item.actionsRequired,
+              expirationDates: item.expirationDates,
               warnings: item.warnings,
             })),
           },

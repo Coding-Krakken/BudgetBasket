@@ -14,6 +14,7 @@ Flipp publicly positions its platform around retailer, brand, and media partner 
 - Feed source: `src/providers/weekly-ads.demo.json`.
 - Sync path: `/api/cron/sync-providers` or `/api/providers/sync/seed-flipp`.
 - Imported rows become `WEEKLY_AD_DEAL` opportunities with `WEEKLY_AD` confidence.
+- Imported rows are also written to `WeeklyAdDeal` for circular-specific display, audit, and expiration tracking.
 - Matching sale prices are written as `PriceObservation` rows.
 - Feed rows expire at the end of their configured weekly/monthly window.
 
@@ -23,4 +24,3 @@ Flipp publicly positions its platform around retailer, brand, and media partner 
 2. Replace the JSON feed reader with a credential-backed provider implementation.
 3. Keep the same `ProviderOpportunityData` and `ProviderPriceData` shapes so optimizer behavior does not change.
 4. Retain manual import as an operator fallback for regional stores that provide CSV or emailed circular data.
-

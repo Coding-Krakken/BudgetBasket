@@ -25,6 +25,10 @@ describe("syncProviderData", () => {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         create: vi.fn().mockResolvedValue({}),
       },
+      weeklyAdDeal: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
     };
 
     const result = await syncProviderData("seed-walmart", { database: database as never });
@@ -95,6 +99,10 @@ describe("syncProviderData", () => {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         create: vi.fn().mockResolvedValue({}),
       },
+      weeklyAdDeal: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
     };
 
     const result = await syncProviderData("seed-walmart", { database: database as never });
@@ -125,6 +133,9 @@ describe("syncProviderData", () => {
       priceObservation: {
         updateMany: vi.fn().mockResolvedValue({ count: 2 }),
       },
+      weeklyAdDeal: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
     };
     const now = new Date("2026-06-23T12:00:00.000Z");
 
@@ -133,6 +144,7 @@ describe("syncProviderData", () => {
     expect(result).toEqual({
       expiredOpportunities: 3,
       expiredPriceObservations: 2,
+      expiredWeeklyAdDeals: 1,
     });
     expect(database.opportunity.updateMany).toHaveBeenCalledWith({
       where: {
@@ -145,6 +157,13 @@ describe("syncProviderData", () => {
       where: {
         isActive: true,
         expiresAt: { lt: now },
+      },
+      data: { isActive: false },
+    });
+    expect(database.weeklyAdDeal.updateMany).toHaveBeenCalledWith({
+      where: {
+        isActive: true,
+        validTo: { lt: now },
       },
       data: { isActive: false },
     });
@@ -181,6 +200,10 @@ describe("syncProviderData", () => {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         create: vi.fn().mockResolvedValue({}),
       },
+      weeklyAdDeal: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
     };
 
     const result = await syncAllProviderData({ database: database as never });
@@ -194,7 +217,9 @@ describe("syncProviderData", () => {
     expect(result.expirationSweep).toEqual({
       expiredOpportunities: 0,
       expiredPriceObservations: 0,
+      expiredWeeklyAdDeals: 0,
     });
     expect(database.providerSyncRun.create).toHaveBeenCalledTimes(4);
+    expect(database.weeklyAdDeal.create).toHaveBeenCalled();
   });
 });

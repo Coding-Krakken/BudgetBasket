@@ -426,7 +426,7 @@ Returns health and status of all known data providers, including those not yet i
 
 Runs the provider freshness scheduler. The route deactivates expired opportunities and price observations, then syncs every registered provider with price or opportunity capabilities.
 
-Production requests require `Authorization: Bearer $CRON_SECRET` or `Authorization: Bearer $PROVIDER_SYNC_SECRET`. Vercel Cron can also invoke the route directly for the configured schedule.
+Production requests require `Authorization: Bearer $CRON_SECRET` or `Authorization: Bearer $PROVIDER_SYNC_SECRET`.
 
 Response:
 
@@ -436,7 +436,8 @@ Response:
   "data": {
     "expirationSweep": {
       "expiredOpportunities": 4,
-      "expiredPriceObservations": 8
+      "expiredPriceObservations": 8,
+      "expiredWeeklyAdDeals": 2
     },
     "results": [
       {

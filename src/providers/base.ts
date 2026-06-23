@@ -27,6 +27,7 @@ export interface ProviderOpportunityData {
   productSlug?: string;
   categorySlug?: string;
   brandSlug?: string;
+  providerRef?: string;
   valueType: string;
   valueAmount: number;
   valuePercent?: number;
@@ -41,9 +42,18 @@ export interface ProviderOpportunityData {
   requiresReceipt?: boolean;
   confidenceLevel?: string;
   confidence?: number;
+  startsAt?: Date | null;
   expiresAt?: Date | null;
   isFeatured?: boolean;
   termsAndConditions?: string;
+  weeklyAd?: {
+    salePrice?: number | null;
+    wasPrice?: number | null;
+    savings?: number | null;
+    validFrom?: Date | null;
+    validTo?: Date | null;
+    pageNumber?: number | null;
+  };
 }
 
 export abstract class BaseProvider {

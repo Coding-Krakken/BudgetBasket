@@ -288,6 +288,8 @@ Simplified representation of weekly circular deals. Separate from Opportunity to
 |---|---|---|
 | `storeId` | String | FK to Store |
 | `productId` | String? | FK to Product (if matched) |
+| `providerId` | String | Weekly ad provider/source, e.g. `seed-flipp` |
+| `providerRef` | String? | Stable upstream or import-feed reference |
 | `salePrice` / `wasPrice` / `savings` | Float? | Ad pricing |
 | `validFrom` / `validTo` | DateTime | Ad validity window |
 | `pageNumber` | Int? | For PDF-imported ads |

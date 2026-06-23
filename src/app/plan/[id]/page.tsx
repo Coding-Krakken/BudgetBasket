@@ -54,6 +54,7 @@ export default async function PlanDetailPage({
   if (!plan) notFound();
 
   const isExpired = plan.expiresAt && plan.expiresAt < new Date();
+  const expiredOfferItems = plan.items.filter(item => item.expirationDates.length > 0 && plan.expiresAt && plan.expiresAt < new Date());
 
   const MODE_LABELS: Record<string, string> = {
     CHEAPEST: "Best Price",
@@ -111,7 +112,12 @@ export default async function PlanDetailPage({
       {isExpired && (
         <div className="mb-4 flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>This plan has expired. Prices and offers may no longer be valid. <Link href="/plan" className="underline font-medium">Create a new plan</Link>.</p>
+          <div>
+            <p>This plan has expired. Prices and offers may no longer be valid. <Link href="/plan" className="underline font-medium">Create a new plan</Link>.</p>
+            {expiredOfferItems.length > 0 && (
+              <p className="mt-1 text-xs">At least one applied offer in this saved plan has passed its expiration window.</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -187,6 +193,13 @@ export default async function PlanDetailPage({
                           <Badge key={i} variant="outline" className="text-[10px] text-amber-700 border-amber-200">
                             {action}
                           </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {item.expirationDates.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {item.expirationDates.slice(0, 2).map((expires, i) => (
+                          <p key={i} className="text-[10px] text-muted-foreground">{expires}</p>
                         ))}
                       </div>
                     )}

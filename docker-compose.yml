@@ -81,7 +81,7 @@ services:
       sh -c "apk add --no-cache wget >/dev/null &&
       while true; do
         wget -qO- --header='Authorization: Bearer ${CRON_SECRET:-local-cron-secret}' http://app:3000/api/cron/sync-providers || true;
-        sleep 21600;
+        sleep 86400;
       done"
     depends_on:
       app:

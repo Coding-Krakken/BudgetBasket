@@ -6,7 +6,8 @@
     "productSlug": "eggs-large-dozen",
     "salePrice": 2.49,
     "wasPrice": 3.49,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 1
   },
   {
     "title": "Aldi Weekly: Chicken Breast $3.49/lb",
@@ -16,7 +17,8 @@
     "salePrice": 3.49,
     "wasPrice": 4.49,
     "validDays": 7,
-    "isFeatured": true
+    "isFeatured": true,
+    "pageNumber": 1
   },
   {
     "title": "Kroger Weekly: Ground Beef $4.49/lb",
@@ -25,7 +27,8 @@
     "productSlug": "ground-beef-80-20",
     "salePrice": 4.49,
     "wasPrice": 5.49,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 2
   },
   {
     "title": "Wegmans: Salmon Fillet $7.99/lb",
@@ -34,7 +37,8 @@
     "productSlug": "salmon-fillet",
     "salePrice": 7.99,
     "wasPrice": 9.99,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 3
   },
   {
     "title": "Target Weekly: Tide Pods $5 Off",
@@ -44,7 +48,8 @@
     "salePrice": 11.99,
     "wasPrice": 16.99,
     "validDays": 7,
-    "isFeatured": true
+    "isFeatured": true,
+    "pageNumber": 4
   },
   {
     "title": "Walmart Weekly: Bounty Paper Towels $3 Off",
@@ -53,7 +58,8 @@
     "productSlug": "paper-towels-bounty-8pk",
     "salePrice": 10.97,
     "wasPrice": 13.97,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 5
   },
   {
     "title": "Kroger Weekly: Orange Juice $3.99",
@@ -62,7 +68,8 @@
     "productSlug": "orange-juice-tropicana-52oz",
     "salePrice": 3.99,
     "wasPrice": 4.79,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 2
   },
   {
     "title": "Wegmans: Strawberries $1.99/lb",
@@ -71,7 +78,8 @@
     "productSlug": "strawberries-1lb",
     "salePrice": 1.99,
     "wasPrice": 3.49,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 3
   },
   {
     "title": "CVS Weekly: Crest Toothpaste $2.99",
@@ -80,7 +88,8 @@
     "productSlug": "toothpaste-crest-65oz",
     "salePrice": 2.99,
     "wasPrice": 5.99,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 6
   },
   {
     "title": "Walgreens Weekly: Pantene Buy 1 Get 50% Off",
@@ -89,7 +98,8 @@
     "productSlug": "shampoo-pantene-12oz",
     "salePrice": 3.49,
     "wasPrice": 5.99,
-    "validDays": 7
+    "validDays": 7,
+    "pageNumber": 7
   },
   {
     "title": "Costco Monthly: Peanut Butter 2-Pack Value",
@@ -98,6 +108,7 @@
     "productSlug": "peanut-butter-jif-40oz",
     "salePrice": 7.99,
     "wasPrice": 9.99,
-    "validDays": 30
+    "validDays": 30,
+    "pageNumber": 8
   }
 ]

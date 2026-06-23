@@ -12,7 +12,7 @@ import type { ProviderOpportunityData, ProviderPriceData } from "./base";
 
 type SyncDbClient = Pick<
   PrismaClient,
-  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity"
+  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity" | "weeklyAdDeal"
 >;
 
 export interface ProviderSyncResult {
@@ -94,6 +94,13 @@ export async function syncProviderData(
       data: { isActive: false },
     });
 
+    if (provider.capabilities.weeklyAds) {
+      await database.weeklyAdDeal.updateMany({
+        where: { providerId: provider.id, isActive: true },
+        data: { isActive: false },
+      });
+    }
+
     for (const price of priceResult.data) {
       const productId = productIdBySlug.get(price.productSlug);
       const storeId = storeIdBySlug.get(price.storeSlug);
@@ -138,6 +145,7 @@ export async function syncProviderData(
           categorySlug: opportunity.categorySlug,
           brandSlug: opportunity.brandSlug,
           providerId: provider.id,
+          providerRef: opportunity.providerRef,
           valueType: opportunity.valueType,
           valueAmount: opportunity.valueAmount,
           valuePercent: opportunity.valuePercent,
@@ -153,12 +161,38 @@ export async function syncProviderData(
           confidenceLevel: toConfidenceLevel(opportunity.confidenceLevel),
           confidence: opportunity.confidence ?? 0.75,
           termsAndConditions: opportunity.termsAndConditions,
+          startsAt: opportunity.startsAt ?? null,
           expiresAt: opportunity.expiresAt ?? null,
           isActive: true,
           isVerified: opportunity.confidenceLevel === "OFFICIAL_API",
           isFeatured: opportunity.isFeatured ?? false,
         },
       });
+
+      if (opportunity.type === "WEEKLY_AD_DEAL" && storeId) {
+        const validFrom = opportunity.weeklyAd?.validFrom ?? opportunity.startsAt ?? new Date();
+        const validTo = opportunity.weeklyAd?.validTo ?? opportunity.expiresAt;
+
+        if (validTo) {
+          await database.weeklyAdDeal.create({
+            data: {
+              providerId: provider.id,
+              providerRef: opportunity.providerRef,
+              storeId,
+              productId,
+              title: opportunity.title,
+              description: opportunity.description,
+              salePrice: opportunity.weeklyAd?.salePrice ?? opportunity.valueAmount,
+              wasPrice: opportunity.weeklyAd?.wasPrice ?? null,
+              savings: opportunity.weeklyAd?.savings ?? null,
+              validFrom,
+              validTo,
+              pageNumber: opportunity.weeklyAd?.pageNumber ?? null,
+              isActive: true,
+            },
+          });
+        }
+      }
       opportunitiesIngested += 1;
     }
 
@@ -208,15 +242,16 @@ export async function syncProviderData(
 export interface ExpirationSweepResult {
   expiredOpportunities: number;
   expiredPriceObservations: number;
+  expiredWeeklyAdDeals: number;
 }
 
 export async function expireStaleOfferData(
-  options: { database?: Pick<PrismaClient, "opportunity" | "priceObservation">; now?: Date } = {}
+  options: { database?: Pick<PrismaClient, "opportunity" | "priceObservation" | "weeklyAdDeal">; now?: Date } = {}
 ): Promise<ExpirationSweepResult> {
   const database = options.database ?? db;
   const now = options.now ?? new Date();
 
-  const [opportunities, priceObservations] = await Promise.all([
+  const [opportunities, priceObservations, weeklyAdDeals] = await Promise.all([
     database.opportunity.updateMany({
       where: {
         isActive: true,
@@ -231,11 +266,19 @@ export async function expireStaleOfferData(
       },
       data: { isActive: false },
     }),
+    database.weeklyAdDeal.updateMany({
+      where: {
+        isActive: true,
+        validTo: { lt: now },
+      },
+      data: { isActive: false },
+    }),
   ]);
 
   return {
     expiredOpportunities: opportunities.count,
     expiredPriceObservations: priceObservations.count,
+    expiredWeeklyAdDeals: weeklyAdDeals.count,
   };
 }
 

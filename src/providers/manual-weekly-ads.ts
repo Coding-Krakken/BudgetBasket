@@ -12,6 +12,7 @@ type WeeklyAdFeedItem = {
   wasPrice?: number;
   validDays: number;
   isFeatured?: boolean;
+  pageNumber?: number;
 };
 
 const FEED = weeklyAdFeed as WeeklyAdFeedItem[];
@@ -36,8 +37,6 @@ export class ManualWeeklyAdProvider extends BaseProvider {
   ): Promise<ProviderFetchResult<ProviderPriceData>> {
     const productSlugs = new Set(products.map(product => product.slug));
     const storeSlugs = new Set(stores.map(store => store.slug));
-    const expiresAt = this.expiresAt();
-
     return this.success(
       FEED
         .filter(item => productSlugs.has(item.productSlug) && storeSlugs.has(item.storeSlug))
@@ -48,7 +47,7 @@ export class ManualWeeklyAdProvider extends BaseProvider {
           salePrice: item.salePrice,
           source: this.id,
           confidence: 0.8,
-          expiresAt,
+          expiresAt: this.expiresAt(item),
         }))
     );
   }
@@ -59,30 +58,42 @@ export class ManualWeeklyAdProvider extends BaseProvider {
   ): Promise<ProviderFetchResult<ProviderOpportunityData>> {
     const productSlugs = new Set(products.map(product => product.slug));
     const storeSlugs = new Set(stores.map(store => store.slug));
-    const expiresAt = this.expiresAt();
+    const startsAt = new Date();
 
     return this.success(
       FEED
         .filter(item => productSlugs.has(item.productSlug) && storeSlugs.has(item.storeSlug))
-        .map(item => ({
-          type: "WEEKLY_AD_DEAL",
-          title: item.title,
-          description: item.description,
-          storeSlug: item.storeSlug,
-          productSlug: item.productSlug,
-          valueType: "SALE_PRICE",
-          valueAmount: item.salePrice,
-          stackability: "STACKABLE_WITH_MFG",
-          confidenceLevel: "WEEKLY_AD",
-          confidence: 0.8,
-          expiresAt,
-          isFeatured: item.isFeatured ?? false,
-        }))
+        .map(item => {
+          const expiresAt = this.expiresAt(item);
+          return {
+            type: "WEEKLY_AD_DEAL",
+            title: item.title,
+            description: item.description,
+            storeSlug: item.storeSlug,
+            productSlug: item.productSlug,
+            providerRef: `${item.storeSlug}:${item.productSlug}:${item.salePrice}`,
+            valueType: "SALE_PRICE",
+            valueAmount: item.salePrice,
+            stackability: "STACKABLE_WITH_MFG",
+            confidenceLevel: "WEEKLY_AD",
+            confidence: 0.8,
+            startsAt,
+            expiresAt,
+            isFeatured: item.isFeatured ?? false,
+            weeklyAd: {
+              salePrice: item.salePrice,
+              wasPrice: item.wasPrice ?? null,
+              savings: item.wasPrice ? Math.max(item.wasPrice - item.salePrice, 0) : null,
+              validFrom: startsAt,
+              validTo: expiresAt,
+              pageNumber: item.pageNumber ?? null,
+            },
+          };
+        })
     );
   }
 
-  private expiresAt() {
-    const longestFeedWindow = Math.max(...FEED.map(item => item.validDays));
-    return new Date(Date.now() + longestFeedWindow * 24 * 60 * 60 * 1000);
+  private expiresAt(item: Pick<WeeklyAdFeedItem, "validDays">) {
+    return new Date(Date.now() + item.validDays * 24 * 60 * 60 * 1000);
   }
 }

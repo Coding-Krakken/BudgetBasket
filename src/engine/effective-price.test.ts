@@ -85,6 +85,26 @@ describe("calculateEffectivePrice", () => {
     expect(result.immediateReduction).toBe(0);
   });
 
+  it("uses shopper-facing provider names for receipt rebate actions", () => {
+    const rebate: Opportunity = {
+      ...baseOpportunity,
+      id: "ibotta-rebate",
+      type: "REBATE",
+      providerId: "seed-ibotta",
+      valueType: "CASH_BACK",
+      valueAmount: 1,
+      requiresReceipt: true,
+    };
+
+    const result = calculateEffectivePrice(baseContext, [rebate]);
+
+    expect(result.futureValue).toBe(1);
+    expect(result.appliedOpportunities[0]).toMatchObject({
+      isFutureValue: true,
+      actionDescription: "Submit receipt in Ibotta after purchase",
+    });
+  });
+
   it("rejects opportunities with quantity requirements not met", () => {
     const bogoRequired: Opportunity = { ...baseOpportunity, minimumQuantity: 2 };
     const result = calculateEffectivePrice({ ...baseContext, quantity: 1 }, [bogoRequired]);

@@ -17,7 +17,7 @@ type SyncDbClient = Pick<
 
 export interface ProviderSyncResult {
   providerId: string;
-  status: "SUCCESS" | "FAILED" | "SKIPPED";
+  status: "SUCCESS" | "SUCCESS_WITH_ERRORS" | "FAILED" | "SKIPPED";
   pricesIngested: number;
   opportunitiesIngested: number;
   itemsFailed: number;
@@ -176,7 +176,7 @@ export async function syncProviderData(
 
     return {
       providerId: provider.id,
-      status: "SUCCESS",
+      status,
       pricesIngested,
       opportunitiesIngested,
       itemsFailed,

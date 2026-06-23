@@ -71,4 +71,49 @@ describe("syncProviderData", () => {
       }),
     });
   });
+
+  it("returns SUCCESS_WITH_ERRORS when provider items cannot be mapped", async () => {
+    const database = {
+      providerSyncRun: {
+        create: vi.fn().mockResolvedValue({ id: "sync-1" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      product: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: "p1", slug: "chicken-breast-boneless", name: "Chicken Breast", normalizedName: "chicken breast" },
+          { id: "p2", slug: "cheerios-18oz", name: "Cheerios Original", normalizedName: "cheerios original" },
+        ]),
+      },
+      store: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      priceObservation: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+      opportunity: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+    };
+
+    const result = await syncProviderData("seed-walmart", { database: database as never });
+
+    expect(result).toEqual({
+      providerId: "seed-walmart",
+      status: "SUCCESS_WITH_ERRORS",
+      pricesIngested: 0,
+      opportunitiesIngested: 0,
+      itemsFailed: 4,
+    });
+    expect(database.providerSyncRun.update).toHaveBeenCalledWith({
+      where: { id: "sync-1" },
+      data: expect.objectContaining({
+        status: "SUCCESS_WITH_ERRORS",
+        itemsIngested: 0,
+        itemsUpdated: 0,
+        itemsFailed: 4,
+      }),
+    });
+  });
 });

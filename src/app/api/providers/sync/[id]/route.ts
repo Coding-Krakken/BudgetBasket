@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncProviderData } from "@/providers/sync";
+import type { ProviderSyncResult } from "@/providers/sync";
+
+function getSyncResponseStatus(status: ProviderSyncResult["status"]) {
+  if (status === "FAILED") return 500;
+  if (status === "SUCCESS_WITH_ERRORS") return 207;
+  return 200;
+}
 
 export async function POST(
   _request: NextRequest,
@@ -28,6 +35,6 @@ export async function POST(
       success: result.status === "SUCCESS",
       data: result,
     },
-    { status: result.status === "FAILED" ? 500 : 200 }
+    { status: getSyncResponseStatus(result.status) }
   );
 }

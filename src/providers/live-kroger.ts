@@ -71,8 +71,11 @@ export class LiveKrogerProvider extends BaseProvider {
   };
 
   private token: { value: string; expiresAt: number } | null = null;
+  private tokenRequest: Promise<string> | null = null;
   private lastRequestAt = 0;
+  private requestQueue: Promise<void> = Promise.resolve();
   private productCache = new Map<string, KrogerProductItem | null>();
+  private productRequests = new Map<string, Promise<KrogerProductItem | null>>();
 
   constructor(
     private readonly credentials: CredentialStore = credentialStore,
@@ -190,6 +193,18 @@ export class LiveKrogerProvider extends BaseProvider {
       return this.token.value;
     }
 
+    if (this.tokenRequest) {
+      return this.tokenRequest;
+    }
+
+    this.tokenRequest = this.fetchAccessToken().finally(() => {
+      this.tokenRequest = null;
+    });
+
+    return this.tokenRequest;
+  }
+
+  private async fetchAccessToken() {
     const clientId = this.credentials.getCredential(this.id, "client_id");
     const clientSecret = this.credentials.getCredential(this.id, "client_secret");
     if (!clientId || !clientSecret) throw new Error("Kroger API credentials are missing.");
@@ -227,6 +242,23 @@ export class LiveKrogerProvider extends BaseProvider {
       return this.productCache.get(cacheKey) ?? null;
     }
 
+    const existingRequest = this.productRequests.get(cacheKey);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = this.loadProduct(product, locationId, cacheKey).finally(() => {
+      this.productRequests.delete(cacheKey);
+    });
+    this.productRequests.set(cacheKey, request);
+    return request;
+  }
+
+  private async loadProduct(
+    product: Pick<Product, "slug" | "name" | "normalizedName">,
+    locationId: string,
+    cacheKey: string
+  ) {
     const token = await this.getAccessToken();
     const productResult = await this.searchProducts(token, product.normalizedName || product.name, locationId);
     const item = productResult.data?.[0] ?? null;
@@ -324,10 +356,15 @@ export class LiveKrogerProvider extends BaseProvider {
   }
 
   private async waitForRateLimit() {
-    const waitMs = this.lastRequestAt + MIN_REQUEST_INTERVAL_MS - Date.now();
-    if (waitMs > 0) {
-      await new Promise(resolve => setTimeout(resolve, waitMs));
-    }
-    this.lastRequestAt = Date.now();
+    const scheduledRequest = this.requestQueue.then(async () => {
+      const waitMs = this.lastRequestAt + MIN_REQUEST_INTERVAL_MS - Date.now();
+      if (waitMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+      }
+      this.lastRequestAt = Date.now();
+    });
+
+    this.requestQueue = scheduledRequest.catch(() => undefined);
+    await scheduledRequest;
   }
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EnvCredentialStore } from "./credential-store";
 import { LiveKrogerProvider } from "./live-kroger";
 
@@ -13,6 +13,10 @@ describe("LiveKrogerProvider", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-23T12:00:00Z"));
     delete process.env.KROGER_DEFAULT_LOCATION_ID;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("gracefully fails when credentials are missing", async () => {
@@ -138,5 +142,57 @@ describe("LiveKrogerProvider", () => {
         confidence: 0.95,
       }),
     ]);
+  });
+
+  it("deduplicates token and product requests across concurrent fetches", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: "token-value", expires_in: 1800 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              productId: "0001111040101",
+              description: "Whole Milk",
+              items: [{ size: "1 gal", price: { regular: 3.99, promo: 3.49 } }],
+              coupons: [
+                {
+                  id: "coupon-1",
+                  title: "$1 off Whole Milk",
+                  valueAmount: 1,
+                  isDigital: true,
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+    const provider = new LiveKrogerProvider(
+      new EnvCredentialStore({
+        KROGER_CLIENT_ID: "client-id",
+        KROGER_CLIENT_SECRET: "client-secret",
+      }),
+      fetchImpl as unknown as typeof fetch
+    );
+
+    const pending = Promise.all([
+      provider.fetchPrices(products, stores),
+      provider.fetchOpportunities(products, stores),
+    ]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const [priceResult, opportunityResult] = await pending;
+
+    expect(priceResult.success).toBe(true);
+    expect(opportunityResult.success).toBe(true);
+    expect(priceResult.data).toHaveLength(1);
+    expect(opportunityResult.data).toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://api.kroger.com/v1/connect/oauth2/token");
+    expect(String(fetchImpl.mock.calls[1][0])).toContain("https://api.kroger.com/v1/products?");
   });
 });

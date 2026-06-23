@@ -145,6 +145,7 @@ export interface PriceObservation {
   storeId: string;
   price: number;
   salePrice?: number | null;
+  unit?: string | null;
   unitPrice?: number | null;
   currency: string;
   source: string;
@@ -180,6 +181,12 @@ export interface AppliedOpportunity {
   expiresAt?: Date | null;
 }
 
+export interface UnitPriceInfo {
+  price: number;
+  unit: string;
+  label: string;
+}
+
 export interface CartPlanItem {
   raw: string;
   normalized: string;
@@ -189,14 +196,23 @@ export interface CartPlanItem {
   quantity: number;
   basePrice: number;
   salePrice?: number | null;
+  immediatePrice: number;
   effectivePrice: number;
   totalBasePrice: number;
+  totalImmediatePrice: number;
   totalEffectivePrice: number;
+  immediateSavings: number;
+  futureValue: number;
   totalSavings: number;
+  unitPrice?: UnitPriceInfo | null;
+  isBestUnitPrice?: boolean;
+  priceSource?: string | null;
+  observedAt?: Date | null;
   confidence: number;
   appliedOpportunities: AppliedOpportunity[];
   isSubstitution: boolean;
-  substitutionNote?: string;
+  substitutionFor?: string | null;
+  substitutionNote?: string | null;
   actionsRequired: string[];
   warnings: string[];
   expirationDates: string[];
@@ -207,7 +223,11 @@ export interface OptimizationScenario {
   label: string;
   description: string;
   totalBasePrice: number;
+  totalImmediatePrice: number;
   totalEffectivePrice: number;
+  totalImmediateSavings: number;
+  totalFutureValue: number;
+  totalValue: number;
   totalSavings: number;
   savingsPercent: number;
   storeCount: number;

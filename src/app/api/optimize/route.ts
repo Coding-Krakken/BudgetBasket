@@ -114,7 +114,11 @@ export async function POST(request: NextRequest) {
           storeId: true,
           price: true,
           salePrice: true,
+          unit: true,
+          unitPrice: true,
+          source: true,
           confidence: true,
+          observedAt: true,
         },
       }),
     ]);

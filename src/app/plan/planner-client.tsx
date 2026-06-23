@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   ShoppingCart,
   Loader2,
@@ -10,38 +11,58 @@ import {
   ChevronUp,
   Store,
   Tag,
-  Receipt,
   Star,
   Info,
-  ArrowRight,
   TrendingDown,
   Clock,
   Shield,
   Package,
+  BookmarkPlus,
+  MapPin,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import { formatCurrency, formatPercent, formatRelativeTime, cn } from "@/lib/utils";
 import { getConfidenceColor, getConfidenceLabel, getSavingsClaimLanguage } from "@/engine/confidence";
+import { lookupZip, haversineDistanceMiles, isZipKnown } from "@/lib/zipcode";
 import type { OptimizationResult, OptimizationScenario, CartPlanItem, OptimizationMode } from "@/types";
 
-interface Store {
+const PREFS_KEY = "cartwise:prefs";
+const PLANS_KEY = "cartwise:plans";
+
+interface StoreShape {
   id: string;
   slug: string;
   name: string;
   chain: string;
   hasLoyaltyCard: boolean;
   loyaltyCardName: string | null;
+  locations?: Array<{ zipCode?: string | null; lat?: number | null; lng?: number | null }>;
 }
 
 interface PlannerClientProps {
-  stores: Store[];
+  stores: StoreShape[];
 }
+
+interface StoredPrefs {
+  defaultOptimizationMode: OptimizationMode;
+  hassleCostPerStore: number;
+  zipCode: string;
+  radiusMiles: number;
+}
+
+const DEFAULT_PREFS: StoredPrefs = {
+  defaultOptimizationMode: "CHEAPEST",
+  hassleCostPerStore: 5,
+  zipCode: "",
+  radiusMiles: 25,
+};
 
 const MODES: Array<{ value: OptimizationMode; label: string; icon: React.ElementType; desc: string }> = [
   { value: "CHEAPEST", label: "Best Price", icon: TrendingDown, desc: "Lowest effective price" },
@@ -57,30 +78,149 @@ const DEMO_LISTS = [
   "bacon, butter, yogurt, broccoli, apples, coffee, paper towels, toilet paper",
 ];
 
+const RADIUS_OPTIONS = [10, 25, 50] as const;
+
+function loadPrefs(): StoredPrefs {
+  if (typeof window === "undefined") return DEFAULT_PREFS;
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+function savePrefs(prefs: StoredPrefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function loadPlanIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(PLANS_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function savePlanId(planId: string) {
+  try {
+    const ids = loadPlanIds();
+    const updated = [planId, ...ids.filter(id => id !== planId)].slice(0, 20);
+    localStorage.setItem(PLANS_KEY, JSON.stringify(updated));
+  } catch { /* ignore */ }
+}
+
+function filterStoresByLocation(
+  stores: StoreShape[],
+  zipCode: string,
+  radiusMiles: number
+): StoreShape[] {
+  if (!zipCode || !isZipKnown(zipCode)) return stores;
+  const userCoords = lookupZip(zipCode);
+  if (!userCoords) return stores;
+
+  return stores.filter(store => {
+    const locs = store.locations ?? [];
+    if (locs.length === 0) return true; // no location data — include
+    return locs.some(loc => {
+      if (loc.lat == null || loc.lng == null) return true;
+      return haversineDistanceMiles(userCoords.lat, userCoords.lng, loc.lat, loc.lng) <= radiusMiles;
+    });
+  });
+}
+
 export function PlannerClient({ stores }: PlannerClientProps) {
   const [shoppingList, setShoppingList] = useState("");
   const [mode, setMode] = useState<OptimizationMode>("CHEAPEST");
   const [result, setResult] = useState<OptimizationResult | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+  const [prefs, setPrefs] = useState<StoredPrefs>(DEFAULT_PREFS);
+  const [zipInput, setZipInput] = useState("");
+  const [zipError, setZipError] = useState("");
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+
+  // Load preferences on mount
+  useEffect(() => {
+    const p = loadPrefs();
+    setPrefs(p);
+    setMode(p.defaultOptimizationMode);
+    setZipInput(p.zipCode ?? "");
+    setPrefsLoaded(true);
+  }, []);
+
+  // Persist mode changes
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    const updated = { ...prefs, defaultOptimizationMode: mode };
+    setPrefs(updated);
+    savePrefs(updated);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  const applyZip = () => {
+    const zip = zipInput.trim();
+    if (!zip) {
+      const updated = { ...prefs, zipCode: "" };
+      setPrefs(updated);
+      savePrefs(updated);
+      setZipError("");
+      return;
+    }
+    if (!/^\d{5}$/.test(zip)) {
+      setZipError("Enter a 5-digit US zip code");
+      return;
+    }
+    if (!isZipKnown(zip)) {
+      setZipError("Zip not in demo dataset — try 43215 (Columbus, OH)");
+      return;
+    }
+    const updated = { ...prefs, zipCode: zip };
+    setPrefs(updated);
+    savePrefs(updated);
+    setZipError("");
+  };
+
+  const filteredStores = filterStoresByLocation(stores, prefs.zipCode, prefs.radiusMiles);
 
   const handleOptimize = async () => {
     if (!shoppingList.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setPlanId(null);
     setExpandedItems(new Set());
+
+    const storeIds = filteredStores.length < stores.length
+      ? filteredStores.map(s => s.id)
+      : undefined;
 
     try {
       const res = await fetch("/api/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shoppingList, mode }),
+        body: JSON.stringify({
+          shoppingList,
+          mode,
+          storeIds,
+          preferences: {
+            hassleCostPerStore: prefs.hassleCostPerStore,
+          },
+        }),
       });
       const data = await res.json();
       if (data.success) {
         setResult(data.data);
+        if (data.planId) {
+          setPlanId(data.planId);
+          savePlanId(data.planId);
+        }
       } else {
         setError(data.error ?? "Optimization failed");
       }
@@ -103,7 +243,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
   const primaryScenario = result?.scenarios.find(s => s.mode === mode) ?? result?.primaryScenario;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-6">
       {/* Input Card */}
       <Card>
         <CardHeader>
@@ -112,21 +252,20 @@ export function PlannerClient({ stores }: PlannerClientProps) {
             Enter Your Shopping List
           </CardTitle>
           <CardDescription>
-            Type items separated by commas or new lines. Include quantities if needed (e.g., &quot;chicken breast 2lb&quot;).
+            Type items separated by commas or new lines. Start typing to see product suggestions.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea
+          <AutocompleteInput
             id="shopping-list-input"
             value={shoppingList}
-            onChange={e => setShoppingList(e.target.value)}
-            placeholder="milk, eggs, chicken breast, Cheerios, bananas, toothpaste, laundry detergent..."
-            className="min-h-[120px] resize-none"
+            onChange={setShoppingList}
+            placeholder="milk, eggs, chicken breast, Cheerios, bananas, toothpaste..."
             aria-label="Shopping list"
             aria-describedby="shopping-list-hint"
           />
           <p id="shopping-list-hint" className="sr-only">
-            Enter grocery items separated by commas or new lines. Include quantities if needed.
+            Enter grocery items separated by commas or new lines. Suggestions appear after 2 characters.
           </p>
 
           {/* Demo list suggestions */}
@@ -136,7 +275,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
               <button
                 key={i}
                 onClick={() => setShoppingList(list)}
-                className="text-xs px-2 py-1 rounded-full border bg-muted hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                className="text-xs px-2 py-1 rounded-full border bg-muted hover:bg-accent transition-colors text-muted-foreground hover:text-foreground min-h-[36px]"
                 aria-label={`Load demo shopping list ${i + 1}`}
               >
                 Demo list {i + 1}
@@ -147,7 +286,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
           {/* Optimization Mode */}
           <div role="group" aria-labelledby="mode-label">
             <p id="mode-label" className="text-sm font-medium mb-2">Optimization Mode</p>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-1.5 overflow-x-auto">
               {MODES.map(m => {
                 const Icon = m.icon;
                 return (
@@ -157,27 +296,99 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                     aria-pressed={mode === m.value}
                     aria-label={`${m.label} — ${m.desc}`}
                     className={cn(
-                      "flex flex-col items-center gap-1 p-2.5 rounded-lg border text-center transition-all",
+                      "flex flex-col items-center gap-1 p-2.5 rounded-lg border text-center transition-all min-h-[60px] min-w-0",
                       mode === m.value
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border hover:border-primary/40 hover:bg-muted"
                     )}
                   >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                    <span className="text-xs font-medium leading-tight">{m.label}</span>
-                    <span className="text-[10px] text-muted-foreground leading-tight hidden sm:block">{m.desc}</span>
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="text-[11px] font-medium leading-tight text-center">{m.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Location filter */}
+          <details className="group">
+            <summary className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-h-[44px]">
+              <MapPin className="h-3.5 w-3.5" />
+              Location filter
+              {prefs.zipCode && (
+                <Badge variant="outline" className="text-[10px] ml-1">
+                  {prefs.zipCode} · {prefs.radiusMiles}mi
+                </Badge>
+              )}
+            </summary>
+            <div className="mt-2 p-3 rounded-lg bg-muted/40 border space-y-3">
+              <div className="flex flex-wrap gap-2 items-end">
+                <div className="flex-1 min-w-[120px]">
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block" htmlFor="zip-input">
+                    Your ZIP code
+                  </label>
+                  <input
+                    id="zip-input"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    value={zipInput}
+                    onChange={e => { setZipInput(e.target.value); setZipError(""); }}
+                    onKeyDown={e => e.key === "Enter" && applyZip()}
+                    placeholder="e.g. 43215"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Radius</label>
+                  <div className="flex gap-1">
+                    {RADIUS_OPTIONS.map(r => (
+                      <button
+                        key={r}
+                        onClick={() => {
+                          const updated = { ...prefs, radiusMiles: r };
+                          setPrefs(updated);
+                          savePrefs(updated);
+                        }}
+                        className={cn(
+                          "px-2.5 py-1.5 rounded text-xs border transition-colors min-h-[36px]",
+                          prefs.radiusMiles === r
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:bg-muted"
+                        )}
+                      >
+                        {r}mi
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" onClick={applyZip} className="min-h-[36px]">
+                  Apply
+                </Button>
+              </div>
+              {zipError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {zipError}
+                </p>
+              )}
+              {prefs.zipCode && filteredStores.length < stores.length && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  Showing {filteredStores.length} of {stores.length} stores within {prefs.radiusMiles}mi of {prefs.zipCode}
+                </p>
+              )}
+              {prefs.zipCode && filteredStores.length === stores.length && (
+                <p className="text-xs text-muted-foreground">All {stores.length} stores are within {prefs.radiusMiles}mi</p>
+              )}
+            </div>
+          </details>
+
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               onClick={handleOptimize}
               disabled={loading || !shoppingList.trim()}
               size="lg"
-              className="flex-1 sm:flex-none"
+              className="flex-1 sm:flex-none min-h-[48px]"
               aria-busy={loading}
             >
               {loading ? (
@@ -187,9 +398,23 @@ export function PlannerClient({ stores }: PlannerClientProps) {
               )}
             </Button>
             {result && (
-              <Button variant="outline" onClick={() => { setResult(null); setShoppingList(""); }} aria-label="Clear results and start over">
+              <Button
+                variant="outline"
+                onClick={() => { setResult(null); setShoppingList(""); setPlanId(null); }}
+                aria-label="Clear results and start over"
+                className="min-h-[48px]"
+              >
                 Clear
               </Button>
+            )}
+            {planId && (
+              <Link href={`/plan/${planId}`} className="inline-flex">
+                <Button variant="outline" size="default" className="gap-1.5 min-h-[48px]" aria-label="View saved plan">
+                  <BookmarkPlus className="h-4 w-4" />
+                  <span className="hidden sm:inline">View Saved Plan</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Button>
+              </Link>
             )}
           </div>
 
@@ -200,7 +425,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                 <p>{error}</p>
                 <button
                   onClick={handleOptimize}
-                  className="mt-1.5 underline text-xs opacity-80 hover:opacity-100"
+                  className="mt-1.5 underline text-xs opacity-80 hover:opacity-100 min-h-[32px]"
                 >
                   Try again
                 </button>
@@ -248,8 +473,8 @@ export function PlannerClient({ stores }: PlannerClientProps) {
         <div className="space-y-4">
           {/* Savings Summary */}
           <Card className="border-2 border-primary/20">
-            <CardContent className="p-5">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <CardContent className="p-4 sm:p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <SummaryMetric label="Original Estimate" value={formatCurrency(primaryScenario.totalBasePrice)} />
                 <SummaryMetric
                   label="Optimized Total"
@@ -268,10 +493,10 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                 />
               </div>
 
-              <div className="flex flex-wrap gap-3 text-sm">
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Store className="h-3.5 w-3.5" />
-                  {primaryScenario.storeCount} store{primaryScenario.storeCount !== 1 ? "s" : ""}:
+                  <Store className="h-3.5 w-3.5 shrink-0" />
+                  <span>{primaryScenario.storeCount} store{primaryScenario.storeCount !== 1 ? "s" : ""}:</span>
                   <span className="text-foreground font-medium">
                     {primaryScenario.stores.map(s => s.name).join(", ") || "None matched"}
                   </span>
@@ -282,14 +507,14 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                   if (matched < total) {
                     return (
                       <div className="flex items-center gap-1.5 text-amber-600">
-                        <AlertCircle className="h-3.5 w-3.5" />
-                        <span>{matched}/{total} items matched — {total - matched} not found in catalog</span>
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>{matched}/{total} items matched</span>
                       </div>
                     );
                   }
                   return (
                     <div className="flex items-center gap-1.5 text-emerald-600">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                       <span>All {total} items matched</span>
                     </div>
                   );
@@ -304,20 +529,35 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                   </div>
                 </div>
               )}
+
+              {planId && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>Plan saved — valid for 7 days.</span>
+                  <Link href={`/plan/${planId}`} className="underline font-medium hover:opacity-80">
+                    View plan page →
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Scenario Tabs */}
+          {/* Scenario Tabs — scrollable on mobile */}
           <Tabs defaultValue={mode} onValueChange={v => setMode(v as OptimizationMode)}>
-            <TabsList className="w-full sm:w-auto">
-              {MODES.map(m => (
-                <TabsTrigger key={m.value} value={m.value} className="flex items-center gap-1 text-xs">
-                  <m.icon className="h-3 w-3" />
-                  <span className="hidden sm:inline">{m.label}</span>
-                  <span className="sm:hidden">{m.label.split(" ")[0]}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <TabsList className="w-max min-w-full sm:w-auto flex">
+                {MODES.map(m => (
+                  <TabsTrigger
+                    key={m.value}
+                    value={m.value}
+                    className="flex items-center gap-1 text-xs flex-shrink-0 min-h-[44px]"
+                  >
+                    <m.icon className="h-3 w-3 shrink-0" />
+                    <span>{m.label}</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
             {result.scenarios.map(scenario => (
               <TabsContent key={scenario.mode} value={scenario.mode}>
@@ -329,14 +569,16 @@ export function PlannerClient({ stores }: PlannerClientProps) {
       )}
 
       {/* Store List */}
-      {stores.length > 0 && !result && (
+      {filteredStores.length > 0 && !result && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Supported Stores ({stores.length})</CardTitle>
+            <CardTitle className="text-base">
+              Supported Stores ({filteredStores.length}{filteredStores.length < stores.length ? ` of ${stores.length}` : ""})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {stores.map(store => (
+              {filteredStores.map(store => (
                 <Badge key={store.id} variant="outline" className="gap-1">
                   {store.name}
                   {store.hasLoyaltyCard && (
@@ -367,10 +609,10 @@ function SummaryMetric({
   highlight?: "savings" | "primary";
 }) {
   return (
-    <div className="text-center p-3 rounded-lg bg-muted/50">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+    <div className="text-center p-2.5 rounded-lg bg-muted/50">
+      <p className="text-[11px] text-muted-foreground mb-1 leading-tight">{label}</p>
       <p className={cn(
-        "text-lg font-bold",
+        "text-base sm:text-lg font-bold leading-tight",
         highlight === "savings" && "text-savings",
         highlight === "primary" && "text-primary",
       )}>
@@ -406,18 +648,18 @@ function ScenarioView({
             <div key={store.id}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded flex items-center justify-center text-[10px] font-bold text-white gradient-savings">
+                  <div className="h-6 w-6 rounded flex items-center justify-center text-[10px] font-bold text-white gradient-savings shrink-0">
                     {store.name.slice(0, 2).toUpperCase()}
                   </div>
-                  <span className="font-semibold">{store.name}</span>
+                  <span className="font-semibold text-sm sm:text-base">{store.name}</span>
                 </div>
                 <span className="text-sm font-bold text-savings">{formatCurrency(storeTotal)}</span>
               </div>
 
               <div className="space-y-2 pl-8">
-                {storeItems.map((item, idx) => (
+                {storeItems.map((item) => (
                   <CartItemRow
-                    key={idx}
+                    key={scenario.items.indexOf(item)}
                     item={item}
                     globalIndex={scenario.items.indexOf(item)}
                     expanded={expandedItems.has(scenario.items.indexOf(item))}
@@ -494,12 +736,15 @@ function CartItemRow({
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       <div
-        className={cn("flex items-center justify-between gap-3 p-3", hasDetails && "cursor-pointer hover:bg-muted/30")}
+        className={cn(
+          "flex items-center justify-between gap-3 p-3",
+          hasDetails && "cursor-pointer hover:bg-muted/30 min-h-[52px]"
+        )}
         onClick={hasDetails ? onToggle : undefined}
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm truncate">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm">
               {item.product?.name ?? item.raw}
             </span>
             {item.quantity > 1 && (
@@ -530,7 +775,9 @@ function CartItemRow({
             {Math.round(item.confidence * 100)}%
           </div>
           {hasDetails && (
-            expanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            expanded
+              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           )}
         </div>
       </div>

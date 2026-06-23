@@ -1,6 +1,7 @@
 import type { ProviderHealth } from "@/types";
 import { BaseProvider } from "./base";
 import { SeedWalmartProvider } from "./seed-walmart";
+import db from "@/lib/db";
 
 // Registry of all active providers
 const providerRegistry: Record<string, BaseProvider> = {};
@@ -24,8 +25,8 @@ export function getAllProviders(): BaseProvider[] {
   return Object.values(providerRegistry);
 }
 
+// Synchronous baseline — used when DB is unavailable
 export function getProviderHealthSummary(): ProviderHealth[] {
-  // In MVP, return static health info for all known providers (including non-instantiated ones)
   const knownProviders: ProviderHealth[] = [
     {
       providerId: "seed-walmart",
@@ -211,4 +212,39 @@ export function getProviderHealthSummary(): ProviderHealth[] {
   ];
 
   return knownProviders;
+}
+
+// Async version enriched with real DB counts from ProviderSyncRun records
+export async function getProviderHealthSummaryFromDb(): Promise<ProviderHealth[]> {
+  const base = getProviderHealthSummary();
+
+  try {
+    const [syncRuns, oppCounts] = await Promise.all([
+      db.providerSyncRun.findMany({ orderBy: { startedAt: "desc" }, take: 100 }),
+      db.opportunity.groupBy({ by: ["providerId"], _count: { id: true }, where: { isActive: true } }),
+    ]);
+
+    const latestByProvider = new Map<string, typeof syncRuns[0]>();
+    for (const run of syncRuns) {
+      if (!latestByProvider.has(run.providerId)) latestByProvider.set(run.providerId, run);
+    }
+
+    const countByProvider = new Map<string, number>();
+    for (const row of oppCounts) {
+      countByProvider.set(row.providerId, row._count.id);
+    }
+
+    return base.map(p => {
+      const lastRun = latestByProvider.get(p.providerId);
+      const dbCount = countByProvider.get(p.providerId);
+      return {
+        ...p,
+        ...(lastRun ? { lastSyncAt: lastRun.completedAt ?? lastRun.startedAt } : {}),
+        ...(dbCount !== undefined ? { itemCount: dbCount } : {}),
+      };
+    });
+  } catch {
+    // DB unavailable — return static baseline
+    return base;
+  }
 }

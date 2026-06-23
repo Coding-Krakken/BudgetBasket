@@ -223,7 +223,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
       return;
     }
     if (!isZipKnown(zip)) {
-      setZipError("Zip not in demo dataset — try 43215 (Columbus, OH)");
+      setZipError("No stores found for this zip code — try a nearby zip");
       return;
     }
     const updated = { ...prefs, zipCode: zip };
@@ -1242,7 +1242,6 @@ function inferConfidenceLevel(confidence: number) {
   if (confidence >= 0.92) return "CONNECTED_ACCOUNT";
   if (confidence >= 0.89) return "RECEIPT_VALIDATED";
   if (confidence >= 0.79) return "WEEKLY_AD";
-  if (confidence >= 0.74) return "SEED_DEMO";
   if (confidence >= 0.69) return "PUBLIC_PAGE";
   if (confidence >= 0.59) return "COMMUNITY_REPORT";
   return "UNKNOWN";

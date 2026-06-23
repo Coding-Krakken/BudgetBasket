@@ -211,7 +211,8 @@ export interface CartPlanItem {
   confidence: number;
   appliedOpportunities: AppliedOpportunity[];
   isSubstitution: boolean;
-  substitutionNote?: string;
+  substitutionFor?: string | null;
+  substitutionNote?: string | null;
   actionsRequired: string[];
   warnings: string[];
   expirationDates: string[];

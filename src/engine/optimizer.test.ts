@@ -270,4 +270,189 @@ describe("unit-price normalization", () => {
     expect(result.items[0].unitPrice?.price).toBeCloseTo(0.30);
     expect(result.items[0].storeId).toBe("store-a");
   });
+
+  it("normalizes ml to fl oz for liquid products", async () => {
+    const product = makeProduct({
+      id: "juice",
+      slug: "orange-juice",
+      name: "Orange Juice",
+      keywords: ["orange", "juice"],
+      unit: "ml",
+      unitQuantity: 946, // 946ml = ~32 fl oz
+    });
+    const stores = [makeStore({ id: "store-a", slug: "store-a", name: "Store A" })];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "orange juice", normalized: "orange juice", quantity: 1 }],
+      products: [product],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "juice", storeId: "store-a", price: 3.19, confidence: 0.75 },
+      ],
+      mode: "CHEAPEST",
+    });
+
+    expect(result.items[0].unitPrice?.unit).toBe("fl oz");
+    // 3.19 / (946 / 29.5735) ≈ 0.0997 per fl oz
+    expect(result.items[0].unitPrice?.price).toBeCloseTo(3.19 / (946 / 29.5735), 3);
+  });
+
+  it("normalizes gallons to fl oz for stock-up comparisons", async () => {
+    const product = makeProduct({
+      id: "milk",
+      slug: "whole-milk",
+      name: "Whole Milk",
+      keywords: ["milk"],
+      unit: "gal",
+      unitQuantity: 1,
+    });
+    const stores = [
+      makeStore({ id: "store-a", slug: "store-a", name: "Store A" }),
+      makeStore({ id: "store-b", slug: "store-b", name: "Store B" }),
+    ];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "whole milk", normalized: "whole milk", quantity: 1 }],
+      products: [product],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "milk", storeId: "store-a", price: 3.99, confidence: 0.75 },
+        { productId: "milk", storeId: "store-b", price: 4.49, confidence: 0.75 },
+      ],
+      mode: "STOCK_UP",
+    });
+
+    // 1 gal = 128 fl oz; store-a at $3.99/gal ≈ $0.0312/fl oz (cheaper)
+    expect(result.items[0].unitPrice?.unit).toBe("fl oz");
+    expect(result.items[0].unitPrice?.price).toBeCloseTo(3.99 / 128, 4);
+    expect(result.items[0].storeId).toBe("store-a");
+  });
+});
+
+describe("substitution suggestions", () => {
+  const category = { id: "cat-detergent", slug: "laundry-detergent", name: "Laundry Detergent" };
+
+  it("suggests a same-category product with a better unit price when allowSubstitutions is true", async () => {
+    const smallPack = makeProduct({
+      id: "pods-32",
+      slug: "tide-pods-32",
+      name: "Tide Pods 32ct",
+      keywords: ["tide", "pods"],
+      unit: "ct",
+      unitQuantity: 32,
+      category,
+    });
+    const largePack = makeProduct({
+      id: "pods-81",
+      slug: "tide-pods-81",
+      name: "Tide Pods 81ct",
+      keywords: ["tide", "pods"],
+      unit: "ct",
+      unitQuantity: 81,
+      category,
+    });
+    const stores = [makeStore({ id: "store-a", slug: "store-a", name: "Store A" })];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "tide pods", normalized: "tide pods", quantity: 1 }],
+      products: [smallPack, largePack],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "pods-32", storeId: "store-a", price: 9.99, confidence: 0.75 },  // $0.31/ct
+        { productId: "pods-81", storeId: "store-a", price: 19.99, confidence: 0.75 }, // $0.25/ct — >10% better
+      ],
+      mode: "CHEAPEST",
+      preferences: { allowSubstitutions: true },
+    });
+
+    const mainItem = result.items.find(i => !i.isSubstitution);
+    const sub = result.items.find(i => i.isSubstitution);
+
+    expect(mainItem).toBeDefined();
+    expect(sub).toBeDefined();
+    expect(sub?.substitutionFor).toBe("tide pods");
+    expect(sub?.product?.id).toBe("pods-81");
+    expect(sub?.unitPrice?.price).toBeLessThan(mainItem!.unitPrice!.price);
+    expect(sub?.substitutionNote).toMatch(/% better unit price/);
+  });
+
+  it("does not suggest substitution when no same-category alt has 10%+ better unit price", async () => {
+    const productA = makeProduct({
+      id: "prod-a",
+      slug: "detergent-a",
+      name: "Detergent A 32ct",
+      keywords: ["detergent"],
+      unit: "ct",
+      unitQuantity: 32,
+      category,
+    });
+    const productB = makeProduct({
+      id: "prod-b",
+      slug: "detergent-b",
+      name: "Detergent B 33ct",
+      keywords: ["detergent"],
+      unit: "ct",
+      unitQuantity: 33,
+      category,
+    });
+    const stores = [makeStore({ id: "store-a", slug: "store-a", name: "Store A" })];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "detergent", normalized: "detergent", quantity: 1 }],
+      products: [productA, productB],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "prod-a", storeId: "store-a", price: 9.99, confidence: 0.75 },  // $0.312/ct
+        { productId: "prod-b", storeId: "store-a", price: 9.99, confidence: 0.75 },  // $0.303/ct — <10% better
+      ],
+      mode: "CHEAPEST",
+      preferences: { allowSubstitutions: true },
+    });
+
+    expect(result.items.filter(i => i.isSubstitution)).toHaveLength(0);
+  });
+
+  it("excludes substitution items from plan totals", async () => {
+    const smallPack = makeProduct({
+      id: "soap-small",
+      slug: "soap-small",
+      name: "Soap 8ct",
+      keywords: ["soap"],
+      unit: "ct",
+      unitQuantity: 8,
+      category: { id: "cat-soap", slug: "soap", name: "Soap" },
+    });
+    const largePack = makeProduct({
+      id: "soap-large",
+      slug: "soap-large",
+      name: "Soap 20ct",
+      keywords: ["soap"],
+      unit: "ct",
+      unitQuantity: 20,
+      category: { id: "cat-soap", slug: "soap", name: "Soap" },
+    });
+    const stores = [makeStore({ id: "store-a", slug: "store-a", name: "Store A" })];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "soap", normalized: "soap", quantity: 1 }],
+      products: [smallPack, largePack],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "soap-small", storeId: "store-a", price: 4.00, confidence: 0.75 }, // $0.50/ct
+        { productId: "soap-large", storeId: "store-a", price: 7.00, confidence: 0.75 }, // $0.35/ct — 30% better
+      ],
+      mode: "CHEAPEST",
+      preferences: { allowSubstitutions: true },
+    });
+
+    const mainItem = result.items.find(i => !i.isSubstitution)!;
+    // totalBasePrice should only reflect the main item, not also the substitution
+    expect(result.totalBasePrice).toBeCloseTo(mainItem.totalBasePrice, 2);
+    expect(result.items.filter(i => i.isSubstitution)).toHaveLength(1);
+  });
 });

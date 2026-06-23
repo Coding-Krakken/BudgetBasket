@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import { formatCurrency, formatPercent, formatRelativeTime, cn } from "@/lib/utils";
 import {
@@ -41,6 +42,9 @@ import type { OptimizationResult, OptimizationScenario, CartPlanItem, Optimizati
 const PREFS_KEY = "cartwise:prefs";
 const PLANS_KEY = "cartwise:plans";
 const ACTIONS_KEY = "cartwise:plan-actions";
+const ACTIONS_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+type ActionEntry = { done: boolean; ts: number };
 
 interface StoreShape {
   id: string;
@@ -123,15 +127,33 @@ function savePlanId(planId: string) {
 function loadActionState(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(localStorage.getItem(ACTIONS_KEY) ?? "{}");
+    const stored = JSON.parse(localStorage.getItem(ACTIONS_KEY) ?? "{}") as Record<string, ActionEntry | boolean>;
+    const now = Date.now();
+    const result: Record<string, boolean> = {};
+    for (const [key, entry] of Object.entries(stored)) {
+      if (typeof entry === "boolean") {
+        result[key] = entry; // migrate legacy format
+      } else if (entry && typeof entry === "object" && now - entry.ts < ACTIONS_TTL_MS) {
+        result[key] = entry.done;
+      }
+    }
+    return result;
   } catch {
     return {};
   }
 }
 
-function saveActionState(state: Record<string, boolean>) {
+function saveActionState(prev: Record<string, boolean>, next: Record<string, boolean>) {
   try {
-    localStorage.setItem(ACTIONS_KEY, JSON.stringify(state));
+    const existing = JSON.parse(localStorage.getItem(ACTIONS_KEY) ?? "{}") as Record<string, ActionEntry | boolean>;
+    const now = Date.now();
+    const updated: Record<string, ActionEntry> = {};
+    for (const [key, done] of Object.entries(next)) {
+      const existingEntry = existing[key];
+      const existingTs = existingEntry && typeof existingEntry === "object" ? existingEntry.ts : now;
+      updated[key] = { done, ts: prev[key] === done ? existingTs : now };
+    }
+    localStorage.setItem(ACTIONS_KEY, JSON.stringify(updated));
   } catch { /* ignore */ }
 }
 
@@ -234,6 +256,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
           storeIds,
           preferences: {
             hassleCostPerStore: prefs.hassleCostPerStore,
+            allowSubstitutions: true,
           },
         }),
       });
@@ -266,7 +289,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
   const setActionDone = (key: string, done: boolean) => {
     setActionState(prev => {
       const next = { ...prev, [key]: done };
-      saveActionState(next);
+      saveActionState(prev, next);
       return next;
     });
   };
@@ -524,7 +547,19 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                 />
               </div>
 
-              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              {primaryScenario.totalFutureValue > 0 && (
+                <div className="mt-3 pt-3 border-t flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Total estimated value</span>
+                  <span className="font-bold text-primary">
+                    {formatCurrency(primaryScenario.totalValue)} saved
+                    <span className="text-xs font-normal text-muted-foreground ml-2">
+                      {formatCurrency(primaryScenario.totalImmediateSavings)} now + {formatCurrency(primaryScenario.totalFutureValue)} earned
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm mt-3">
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Store className="h-3.5 w-3.5 shrink-0" />
                   <span>{primaryScenario.storeCount} store{primaryScenario.storeCount !== 1 ? "s" : ""}:</span>
@@ -533,8 +568,9 @@ export function PlannerClient({ stores }: PlannerClientProps) {
                   </span>
                 </div>
                 {(() => {
-                  const matched = primaryScenario.items.filter(i => i.product).length;
-                  const total = primaryScenario.items.length;
+                  const planItems = primaryScenario.items.filter(i => !i.isSubstitution);
+                  const matched = planItems.filter(i => i.product).length;
+                  const total = planItems.length;
                   if (matched < total) {
                     return (
                       <div className="flex items-center gap-1.5 text-amber-600">
@@ -674,6 +710,7 @@ function ScenarioView({
   onSetActionDone: (key: string, done: boolean) => void;
 }) {
   const trackedActions = getTrackedActions(scenario);
+  const substitutions = scenario.items.filter(i => i.isSubstitution);
 
   return (
     <div className="space-y-4 mt-4">
@@ -690,7 +727,8 @@ function ScenarioView({
       {/* Items by store */}
       {scenario.stores.length > 0 ? (
         scenario.stores.map(store => {
-          const storeItems = scenario.items.filter(i => i.storeId === store.id);
+          const storeItems = scenario.items.filter(i => i.storeId === store.id && !i.isSubstitution);
+          if (storeItems.length === 0) return null;
           const storeTotal = storeItems.reduce((s, i) => s + i.totalEffectivePrice, 0);
           return (
             <div key={store.id}>
@@ -722,18 +760,57 @@ function ScenarioView({
         })
       ) : null}
 
-      {/* Unmatched items */}
-      {scenario.items.filter(i => !i.storeId).length > 0 && (
+      {/* Unmatched items (exclude substitution items) */}
+      {scenario.items.filter(i => !i.storeId && !i.isSubstitution).length > 0 && (
         <div>
           <p className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
             <AlertCircle className="h-3.5 w-3.5" />
             Not Found in Catalog
           </p>
           <div className="space-y-2">
-            {scenario.items.filter(i => !i.storeId).map((item, idx) => (
+            {scenario.items.filter(i => !i.storeId && !i.isSubstitution).map((item, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-dashed bg-muted/30">
                 <span className="text-sm">{item.raw}</span>
                 <span className="text-xs text-muted-foreground">Search manually</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Better value alternatives (substitution suggestions with unit price comparison) */}
+      {substitutions.length > 0 && (
+        <div>
+          <p className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+            <TrendingDown className="h-3.5 w-3.5 text-savings" />
+            Better Value Alternatives
+          </p>
+          <div className="space-y-2">
+            {substitutions.map((sub, idx) => (
+              <div key={idx} className="rounded-lg border bg-card p-3 space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Instead of &ldquo;{sub.substitutionFor}&rdquo;</span>
+                      <Badge variant="savings-muted" className="text-[10px]">Better unit price</Badge>
+                    </div>
+                    <p className="font-medium text-sm mt-0.5">
+                      {sub.product?.name ?? sub.raw}
+                      {sub.store && <span className="text-muted-foreground font-normal"> at {sub.store.name}</span>}
+                    </p>
+                    {sub.substitutionNote && (
+                      <p className="text-xs text-savings mt-0.5">{sub.substitutionNote}</p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-sm">{formatCurrency(sub.totalImmediatePrice)}</p>
+                    {sub.unitPrice && (
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(sub.unitPrice.price)}/{sub.unitPrice.unit}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -841,6 +918,18 @@ function CartItemRow({
                     </span>
                   </div>
                 )}
+                {item.priceSource && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Source</span>
+                    <span className="font-medium">{formatSource(item.priceSource)}</span>
+                  </div>
+                )}
+                {item.observedAt && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Last updated</span>
+                    <span className="font-medium">{formatRelativeTime(item.observedAt)}</span>
+                  </div>
+                )}
               </div>
               {item.appliedOpportunities.map((ao, i) => (
                 <div key={i} className="flex items-start justify-between gap-2 text-xs">
@@ -887,7 +976,7 @@ function CartItemRow({
 
 type TrackedAction = {
   key: string;
-  kind: "coupon" | "rebate" | "reward";
+  kind: "coupon" | "rebate" | "reward" | "fuel";
   itemName: string;
   title: string;
   description: string;
@@ -911,11 +1000,16 @@ function buildTrackedAction(
   const opportunity = appliedOpportunity.opportunity;
   if (!appliedOpportunity.requiresAction || !opportunity) return null;
 
-  const kind: TrackedAction["kind"] = appliedOpportunity.isFutureValue || opportunity.requiresReceipt
-    ? "rebate"
-    : opportunity.requiresLoyaltyCard
-      ? "reward"
-      : "coupon";
+  const isFuelOpportunity = opportunity.type === "FUEL_REWARD" || opportunity.valueType === "FUEL_POINTS_MULTIPLIER";
+  const isReceiptRebate = opportunity.requiresReceipt || opportunity.type === "REBATE" || opportunity.type === "CASHBACK";
+
+  const kind: TrackedAction["kind"] = isFuelOpportunity
+    ? "fuel"
+    : isReceiptRebate
+      ? "rebate"
+      : opportunity.requiresLoyaltyCard
+        ? "reward"
+        : "coupon";
 
   return {
     key: `${kind}:${opportunity.id}:${item.product?.id ?? item.normalized}:${index}`,
@@ -952,13 +1046,34 @@ function ActionTracker({
   actionState: Record<string, boolean>;
   onSetActionDone: (key: string, done: boolean) => void;
 }) {
-  const coupons = actions.filter(action => action.kind === "coupon" || action.kind === "reward");
-  const rebates = actions.filter(action => action.kind === "rebate");
-  const clipped = coupons.filter(action => actionState[action.key]).length;
-  const submitted = rebates.filter(action => actionState[action.key]).length;
+  const coupons = actions.filter(a => a.kind === "coupon");
+  const rewardsAndFuel = actions.filter(a => a.kind === "reward" || a.kind === "fuel");
+  const rebates = actions.filter(a => a.kind === "rebate");
+  const fuelActions = actions.filter(a => a.kind === "fuel");
+  const clippedCoupons = coupons.filter(a => actionState[a.key]).length;
+  const loadedRewards = rewardsAndFuel.filter(a => actionState[a.key]).length;
+  const submitted = rebates.filter(a => actionState[a.key]).length;
   const rebateValue = rebates
-    .filter(action => !actionState[action.key])
-    .reduce((sum, action) => sum + action.value, 0);
+    .filter(a => !actionState[a.key])
+    .reduce((sum, a) => sum + a.value, 0);
+  const fuelValue = fuelActions.reduce((sum, a) => sum + a.value, 0);
+  const allPreShoppingDone =
+    coupons.every(a => actionState[a.key]) &&
+    rewardsAndFuel.every(a => actionState[a.key]);
+
+  const summaryParts: string[] = [];
+  if (coupons.length > 0) {
+    summaryParts.push(`${clippedCoupons}/${coupons.length} coupon${coupons.length !== 1 ? "s" : ""} clipped`);
+  }
+  if (rewardsAndFuel.length > 0) {
+    summaryParts.push(`${loadedRewards}/${rewardsAndFuel.length} reward${rewardsAndFuel.length !== 1 ? "s" : ""} loaded`);
+  }
+  if (fuelValue > 0) {
+    summaryParts.push(`Earn ${formatCurrency(fuelValue)} in fuel rewards`);
+  }
+  if (rebates.length > 0) {
+    summaryParts.push(`${rebates.length - submitted} rebate${rebates.length - submitted !== 1 ? "s" : ""} pending — submit receipts to claim ${formatCurrency(rebateValue)}`);
+  }
 
   return (
     <Card className="bg-primary/5 border-primary/20">
@@ -967,18 +1082,35 @@ function ActionTracker({
           <Tag className="h-4 w-4 text-primary" />
           Savings Checklist
         </CardTitle>
-        <CardDescription className="text-xs">
-          {coupons.length > 0 && `${clipped}/${coupons.length} coupons clipped`}
-          {coupons.length > 0 && rebates.length > 0 ? " · " : ""}
-          {rebates.length > 0 && `${rebates.length - submitted} rebates pending — submit receipts to claim ${formatCurrency(rebateValue)}`}
-        </CardDescription>
+        {summaryParts.length > 0 && (
+          <CardDescription className="text-xs">{summaryParts.join(" · ")}</CardDescription>
+        )}
       </CardHeader>
       <CardContent className="pt-0 space-y-2">
         {actions.map(action => (
           <div key={action.key} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{action.itemName}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium truncate">{action.itemName}</p>
+                {action.kind === "fuel" && (
+                  <Badge variant="outline" className="text-[10px] shrink-0">Fuel reward</Badge>
+                )}
+                {action.kind === "rebate" && (
+                  <Badge variant="outline" className="text-[10px] shrink-0">After purchase</Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">{action.description}</p>
+              {action.value > 0 && (
+                <p className="text-xs font-medium text-blue-600">
+                  {action.kind === "fuel"
+                    ? `Earn ${formatCurrency(action.value)} in fuel rewards`
+                    : action.kind === "rebate"
+                      ? `Claim ${formatCurrency(action.value)} after purchase`
+                      : action.kind === "reward"
+                        ? `Earn ${formatCurrency(action.value)} in rewards`
+                        : `Save ${formatCurrency(action.value)}`}
+                </p>
+              )}
             </div>
             <ActionControls
               action={action}
@@ -987,10 +1119,10 @@ function ActionTracker({
             />
           </div>
         ))}
-        {coupons.length > 0 && clipped === coupons.length && (
+        {(coupons.length > 0 || rewardsAndFuel.length > 0) && allPreShoppingDone && (
           <p className="flex items-center gap-1 text-xs text-emerald-700">
             <CheckCircle2 className="h-3 w-3" />
-            All coupon actions marked clipped.
+            All pre-shopping actions done — you&apos;re ready to shop.
           </p>
         )}
       </CardContent>
@@ -1008,8 +1140,8 @@ function ActionControls({
   onSetActionDone: (key: string, done: boolean) => void;
 }) {
   if (!action) return null;
-  const doneLabel = action.kind === "rebate" ? "Submitted" : action.kind === "reward" ? "Loaded" : "Clipped";
-  const ctaLabel = action.kind === "rebate" ? "Submit Receipt" : "Clip Now";
+  const doneLabel = action.kind === "rebate" ? "Submitted" : (action.kind === "reward" || action.kind === "fuel") ? "Loaded" : "Clipped";
+  const ctaLabel = action.kind === "rebate" ? "Submit Receipt" : action.kind === "fuel" ? "Load to Card" : "Clip Now";
 
   return (
     <div className="flex items-center gap-2">
@@ -1049,23 +1181,45 @@ function ConfidenceBadge({
   const level = inferConfidenceLevel(confidence);
   const label = getConfidenceLabel(level);
   const description = CONFIDENCE_DESCRIPTIONS[level] ?? "Confidence details unavailable";
-  const sourceText = source ? `Source: ${formatSource(source)}` : "Source details unavailable";
-  const observedText = observedAt ? `Updated ${formatRelativeTime(new Date(observedAt))}` : "Last verified date unavailable";
-  const title = `${label}: ${description}. ${sourceText}. ${observedText}.`;
+  const sourceText = source ? formatSource(source) : null;
+  const observedText = observedAt ? formatRelativeTime(new Date(observedAt)) : null;
 
-  return (
+  const badge = (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded border font-medium",
+        "inline-flex cursor-help items-center gap-1 rounded border font-medium",
         compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",
         getConfidenceColor(confidence)
       )}
-      title={title}
-      aria-label={title}
     >
       {level === "CART_VALIDATED" && <Shield className="h-3 w-3" />}
       {compact ? `${Math.round(confidence * 100)}%` : `${label} · ${Math.round(confidence * 100)}%`}
+      {!compact && <Info className="h-3 w-3 opacity-50" />}
     </span>
+  );
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" align="end">
+          <div className="space-y-1.5">
+            <p className="font-semibold">{label} · {Math.round(confidence * 100)}%</p>
+            <p className="text-muted-foreground">{description}</p>
+            {sourceText && (
+              <p className="text-muted-foreground text-xs">Source: {sourceText}</p>
+            )}
+            {observedText && (
+              <p className="text-muted-foreground text-xs">Updated {observedText}</p>
+            )}
+            <p className="text-xs border-t pt-1 mt-1 text-muted-foreground">
+              Higher % = more reliable price data.{" "}
+              <span className="font-medium text-foreground">Cart Verified</span> means confirmed by adding to cart.
+            </p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

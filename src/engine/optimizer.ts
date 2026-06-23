@@ -245,10 +245,18 @@ export async function optimizeBasket(input: OptimizeInput): Promise<Optimization
       confidence: best.confidence,
       appliedOpportunities: best.appliedOpportunities,
       isSubstitution: false,
+      substitutionFor: null,
+      substitutionNote: null,
       actionsRequired: best.actionsRequired,
       warnings: best.warnings,
       expirationDates: best.expirationDates,
     });
+
+    // Suggest a better-unit-price alternative when substitutions are enabled
+    if (preferences?.allowSubstitutions) {
+      const sub = findSubstitution(item, product, best, products, allowedStores, opportunities, priceMap, mode, hassle, usedStoreIds);
+      if (sub) items.push(sub);
+    }
   }
 
   return buildScenario(mode, items, allowedStores.filter(s => usedStoreIds.has(s.id)));
@@ -455,6 +463,8 @@ function buildUnmatchedItem(item: ShoppingListItem): CartPlanItem {
     confidence: 0,
     appliedOpportunities: [],
     isSubstitution: false,
+    substitutionFor: null,
+    substitutionNote: null,
     actionsRequired: [],
     warnings: [`"${item.raw}" not found in product catalog — search manually`],
     expirationDates: [],
@@ -466,21 +476,24 @@ function buildScenario(
   items: CartPlanItem[],
   stores: Store[]
 ): OptimizationScenario {
-  const totalBasePrice = items.reduce((s, i) => s + i.totalBasePrice, 0);
-  const totalImmediatePrice = items.reduce((s, i) => s + i.totalImmediatePrice, 0);
-  const totalEffectivePrice = items.reduce((s, i) => s + i.totalEffectivePrice, 0);
-  const totalImmediateSavings = items.reduce((s, i) => s + i.immediateSavings, 0);
-  const totalFutureValue = items.reduce((s, i) => s + i.futureValue, 0);
+  // Substitution items are suggestions; exclude from plan totals
+  const planItems = items.filter(i => !i.isSubstitution);
+
+  const totalBasePrice = planItems.reduce((s, i) => s + i.totalBasePrice, 0);
+  const totalImmediatePrice = planItems.reduce((s, i) => s + i.totalImmediatePrice, 0);
+  const totalEffectivePrice = planItems.reduce((s, i) => s + i.totalEffectivePrice, 0);
+  const totalImmediateSavings = planItems.reduce((s, i) => s + i.immediateSavings, 0);
+  const totalFutureValue = planItems.reduce((s, i) => s + i.futureValue, 0);
   const totalSavings = totalBasePrice - totalEffectivePrice;
   const savingsPercent = totalBasePrice > 0 ? (totalSavings / totalBasePrice) * 100 : 0;
 
-  const confidences = items.filter(i => i.confidence > 0).map(i => i.confidence);
+  const confidences = planItems.filter(i => i.confidence > 0).map(i => i.confidence);
   const overallConfidence = confidences.length > 0
     ? confidences.reduce((s, c) => s + c, 0) / confidences.length
     : 0;
 
-  const warnings = Array.from(new Set(items.flatMap(i => i.warnings)));
-  if (items.some(i => !i.product)) {
+  const warnings = Array.from(new Set(planItems.flatMap(i => i.warnings)));
+  if (planItems.some(i => !i.product)) {
     warnings.unshift("Some items could not be matched to products. Prices are estimated.");
   }
 
@@ -517,7 +530,7 @@ function buildScenario(
     items,
     stores,
     warnings,
-    explanation: generateExplanation(mode, items, stores, totalSavings, overallConfidence),
+    explanation: generateExplanation(mode, planItems, stores, totalSavings, overallConfidence),
   };
 }
 
@@ -620,6 +633,100 @@ function generateExplanation(
     default:
       return `Estimated savings: $${savingsStr} across ${stores.length} store(s).`;
   }
+}
+
+function findSubstitution(
+  item: ShoppingListItem,
+  originalProduct: Product,
+  originalCandidate: StoreCandidate,
+  products: Product[],
+  allowedStores: Store[],
+  opportunities: Opportunity[],
+  priceMap: Map<string, Map<string, PriceObservationInput>>,
+  mode: OptimizationMode,
+  hassle: number,
+  usedStoreIds: Set<string>
+): CartPlanItem | null {
+  // Only useful when we can compare unit prices
+  if (!originalCandidate.unitPrice) return null;
+  if (!originalProduct.category) return null;
+
+  const sameCategory = products.filter(p =>
+    p.id !== originalProduct.id &&
+    p.category?.id === originalProduct.category!.id &&
+    priceMap.has(p.id)
+  );
+  if (sameCategory.length === 0) return null;
+
+  let bestSub: { product: Product; candidate: StoreCandidate } | null = null;
+
+  for (const altProduct of sameCategory) {
+    const altCandidates = buildStoreCandidates(
+      altProduct, item.quantity, allowedStores, opportunities, priceMap, mode
+    );
+    if (altCandidates.length === 0) continue;
+
+    const bestAlt = [...altCandidates].sort((a, b) =>
+      (a.unitPrice?.price ?? Infinity) - (b.unitPrice?.price ?? Infinity)
+    )[0];
+    if (!bestAlt.unitPrice) continue;
+
+    // Must share the same normalized unit for a fair comparison
+    if (bestAlt.unitPrice.unit !== originalCandidate.unitPrice.unit) continue;
+
+    // Must be at least 10% better per unit
+    const improvement = (originalCandidate.unitPrice.price - bestAlt.unitPrice.price) / originalCandidate.unitPrice.price;
+    if (improvement < 0.10) continue;
+
+    if (
+      !bestSub ||
+      bestAlt.unitPrice.price < (bestSub.candidate.unitPrice?.price ?? Infinity)
+    ) {
+      bestSub = { product: altProduct, candidate: bestAlt };
+    }
+  }
+
+  if (!bestSub) return null;
+
+  const { product: altProduct, candidate: bestAlt } = bestSub;
+  const improvement = (
+    (originalCandidate.unitPrice.price - bestAlt.unitPrice!.price) /
+    originalCandidate.unitPrice.price * 100
+  ).toFixed(0);
+  const note =
+    `${improvement}% better unit price vs ${originalProduct.name} ` +
+    `($${originalCandidate.unitPrice.price.toFixed(2)}/${originalCandidate.unitPrice.unit})`;
+
+  return {
+    raw: item.raw,
+    normalized: item.normalized,
+    product: altProduct,
+    storeId: bestAlt.storeId,
+    store: allowedStores.find(s => s.id === bestAlt.storeId),
+    quantity: item.quantity,
+    basePrice: bestAlt.basePrice,
+    salePrice: bestAlt.salePrice ?? null,
+    immediatePrice: bestAlt.immediatePrice,
+    effectivePrice: bestAlt.effectivePrice,
+    totalBasePrice: bestAlt.basePrice * item.quantity,
+    totalImmediatePrice: bestAlt.immediatePrice * item.quantity,
+    totalEffectivePrice: bestAlt.effectivePrice * item.quantity,
+    immediateSavings: bestAlt.immediateSavings * item.quantity,
+    futureValue: bestAlt.futureValue * item.quantity,
+    totalSavings: (bestAlt.basePrice - bestAlt.effectivePrice) * item.quantity,
+    unitPrice: bestAlt.unitPrice,
+    isBestUnitPrice: true,
+    priceSource: bestAlt.priceSource,
+    observedAt: bestAlt.observedAt ? new Date(String(bestAlt.observedAt)) : null,
+    confidence: bestAlt.confidence,
+    appliedOpportunities: bestAlt.appliedOpportunities,
+    isSubstitution: true,
+    substitutionFor: item.raw,
+    substitutionNote: note,
+    actionsRequired: bestAlt.actionsRequired,
+    warnings: [],
+    expirationDates: bestAlt.expirationDates,
+  };
 }
 
 function emptyScenario(mode: OptimizationMode, items: ShoppingListItem[]): OptimizationScenario {

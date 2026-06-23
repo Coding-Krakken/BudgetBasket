@@ -183,9 +183,8 @@ export class LiveKrogerProvider extends BaseProvider {
     }
   }
 
-  private resolveLocationId(stores: Pick<Store, "id" | "slug" | "name">[]) {
-    const krogerStore = stores.find(store => store.slug === "kroger");
-    return process.env.KROGER_DEFAULT_LOCATION_ID || krogerStore?.id || null;
+  private resolveLocationId(_stores: Pick<Store, "id" | "slug" | "name">[]) {
+    return process.env.KROGER_DEFAULT_LOCATION_ID || null;
   }
 
   private async getAccessToken() {

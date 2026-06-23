@@ -29,7 +29,23 @@ describe("LiveKrogerProvider", () => {
     expect(result.error).toContain("credentials are not configured");
   });
 
+  it("gracefully fails when Kroger location id is missing", async () => {
+    const provider = new LiveKrogerProvider(
+      new EnvCredentialStore({
+        KROGER_CLIENT_ID: "client-id",
+        KROGER_CLIENT_SECRET: "client-secret",
+      }),
+      vi.fn() as unknown as typeof fetch
+    );
+
+    const result = await provider.fetchPrices(products, stores);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("KROGER_DEFAULT_LOCATION_ID");
+  });
+
   it("fetches official API prices with OAuth client credentials", async () => {
+    process.env.KROGER_DEFAULT_LOCATION_ID = "01400943";
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce({
@@ -78,6 +94,7 @@ describe("LiveKrogerProvider", () => {
   });
 
   it("maps Kroger coupon and promotional price payloads into opportunities", async () => {
+    process.env.KROGER_DEFAULT_LOCATION_ID = "01400943";
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce({
@@ -145,6 +162,7 @@ describe("LiveKrogerProvider", () => {
   });
 
   it("deduplicates token and product requests across concurrent fetches", async () => {
+    process.env.KROGER_DEFAULT_LOCATION_ID = "01400943";
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce({

@@ -14,7 +14,9 @@ export async function POST(
 ) {
   const { id } = await context.params;
 
-  if (process.env.NODE_ENV === "production" && !process.env.PROVIDER_SYNC_SECRET) {
+  const syncSecret = process.env.PROVIDER_SYNC_SECRET ?? process.env.CRON_SECRET;
+
+  if (process.env.NODE_ENV === "production" && !syncSecret) {
     return NextResponse.json(
       { success: false, error: "Provider sync secret is not configured" },
       { status: 503 }
@@ -23,7 +25,7 @@ export async function POST(
 
   if (process.env.NODE_ENV === "production") {
     const auth = _request.headers.get("authorization");
-    if (auth !== `Bearer ${process.env.PROVIDER_SYNC_SECRET}`) {
+    if (auth !== `Bearer ${syncSecret}`) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
   }

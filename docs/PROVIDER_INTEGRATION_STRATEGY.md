@@ -37,7 +37,13 @@ Provider registration should be credential-aware:
 
 The structured logger redacts known provider credential values before writing development or production log output. New providers must add their credential requirements to the logger redaction list when they add new secret environment variables.
 
-Provider data sync is exposed through `POST /api/providers/sync/[id]`. In production this endpoint requires `PROVIDER_SYNC_SECRET` and a matching `Authorization: Bearer ...` header. A Kroger sync uses `live-kroger-api`, loads all catalog products, writes fresh `PriceObservation` rows, deactivates stale live rows from the same provider, maps coupon/promotion payloads into `Opportunity` rows, and records a `ProviderSyncRun`.
+Provider data sync is exposed through `POST /api/providers/sync/[id]`. In production this endpoint requires `PROVIDER_SYNC_SECRET` or `CRON_SECRET` and a matching `Authorization: Bearer ...` header. A Kroger sync uses `live-kroger-api`, loads all catalog products, writes fresh `PriceObservation` rows, deactivates stale live rows from the same provider, maps coupon/promotion payloads into `Opportunity` rows, and records a `ProviderSyncRun`.
+
+Scheduled freshness runs use `GET` or `POST /api/cron/sync-providers`. The route first deactivates expired `Opportunity`, `WeeklyAdDeal`, and `PriceObservation` rows, then syncs every registered provider with price or opportunity capabilities. Vercel runs this path from `vercel.json` daily at 06:00 UTC. Docker Compose runs a lightweight `provider-cron` service that calls the same endpoint daily with `CRON_SECRET`.
+
+The V1 weekly ad path uses `ManualWeeklyAdProvider` (`seed-flipp`) as the approved fallback while Flipp partner access is pending. It imports a deterministic JSON feed, emits `WEEKLY_AD_DEAL` opportunities with `WEEKLY_AD` confidence, writes matching sale-price observations, and expires those rows at the end of the weekly feed window. The V1 rebate path uses `RebateProvider` with seeded Ibotta and Fetch implementations; real partners should subclass the same abstraction and emit receipt-required `REBATE` opportunities rather than bespoke sync code.
+
+See `docs/integrations/flipp.md` and `docs/integrations/rebates.md` for the V1 partner-access decisions and upgrade path.
 
 ---
 

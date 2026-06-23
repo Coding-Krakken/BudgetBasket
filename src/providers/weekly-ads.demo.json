@@ -1,0 +1,114 @@
+[
+  {
+    "title": "Aldi Weekly: Eggs Only $2.49/dozen",
+    "description": "Aldi weekly special on large eggs with no coupon required.",
+    "storeSlug": "aldi",
+    "productSlug": "eggs-large-dozen",
+    "salePrice": 2.49,
+    "wasPrice": 3.49,
+    "validDays": 7,
+    "pageNumber": 1
+  },
+  {
+    "title": "Aldi Weekly: Chicken Breast $3.49/lb",
+    "description": "Weekly ad price on boneless skinless chicken breast.",
+    "storeSlug": "aldi",
+    "productSlug": "chicken-breast-boneless",
+    "salePrice": 3.49,
+    "wasPrice": 4.49,
+    "validDays": 7,
+    "isFeatured": true,
+    "pageNumber": 1
+  },
+  {
+    "title": "Kroger Weekly: Ground Beef $4.49/lb",
+    "description": "80/20 ground beef sale with Kroger Plus Card.",
+    "storeSlug": "kroger",
+    "productSlug": "ground-beef-80-20",
+    "salePrice": 4.49,
+    "wasPrice": 5.49,
+    "validDays": 7,
+    "pageNumber": 2
+  },
+  {
+    "title": "Wegmans: Salmon Fillet $7.99/lb",
+    "description": "Wegmans weekly fresh seafood deal.",
+    "storeSlug": "wegmans",
+    "productSlug": "salmon-fillet",
+    "salePrice": 7.99,
+    "wasPrice": 9.99,
+    "validDays": 7,
+    "pageNumber": 3
+  },
+  {
+    "title": "Target Weekly: Tide Pods $5 Off",
+    "description": "Target weekly ad price on Tide Pods 32ct.",
+    "storeSlug": "target",
+    "productSlug": "tide-pods-32ct",
+    "salePrice": 11.99,
+    "wasPrice": 16.99,
+    "validDays": 7,
+    "isFeatured": true,
+    "pageNumber": 4
+  },
+  {
+    "title": "Walmart Weekly: Bounty Paper Towels $3 Off",
+    "description": "Rollback weekly ad price on Bounty Select-A-Size 8pk.",
+    "storeSlug": "walmart",
+    "productSlug": "paper-towels-bounty-8pk",
+    "salePrice": 10.97,
+    "wasPrice": 13.97,
+    "validDays": 7,
+    "pageNumber": 5
+  },
+  {
+    "title": "Kroger Weekly: Orange Juice $3.99",
+    "description": "Tropicana 52oz sale with Kroger Plus Card.",
+    "storeSlug": "kroger",
+    "productSlug": "orange-juice-tropicana-52oz",
+    "salePrice": 3.99,
+    "wasPrice": 4.79,
+    "validDays": 7,
+    "pageNumber": 2
+  },
+  {
+    "title": "Wegmans: Strawberries $1.99/lb",
+    "description": "Fresh strawberry weekly produce deal.",
+    "storeSlug": "wegmans",
+    "productSlug": "strawberries-1lb",
+    "salePrice": 1.99,
+    "wasPrice": 3.49,
+    "validDays": 7,
+    "pageNumber": 3
+  },
+  {
+    "title": "CVS Weekly: Crest Toothpaste $2.99",
+    "description": "CVS weekly oral care promotion on Crest toothpaste.",
+    "storeSlug": "cvs",
+    "productSlug": "toothpaste-crest-65oz",
+    "salePrice": 2.99,
+    "wasPrice": 5.99,
+    "validDays": 7,
+    "pageNumber": 6
+  },
+  {
+    "title": "Walgreens Weekly: Pantene Buy 1 Get 50% Off",
+    "description": "Weekly myWalgreens hair care promotion.",
+    "storeSlug": "walgreens",
+    "productSlug": "shampoo-pantene-12oz",
+    "salePrice": 3.49,
+    "wasPrice": 5.99,
+    "validDays": 7,
+    "pageNumber": 7
+  },
+  {
+    "title": "Costco Monthly: Peanut Butter 2-Pack Value",
+    "description": "Warehouse ad value for peanut butter multipack.",
+    "storeSlug": "costco",
+    "productSlug": "peanut-butter-jif-40oz",
+    "salePrice": 7.99,
+    "wasPrice": 9.99,
+    "validDays": 30,
+    "pageNumber": 8
+  }
+]

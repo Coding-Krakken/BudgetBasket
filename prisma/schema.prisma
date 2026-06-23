@@ -312,6 +312,8 @@ model WeeklyAdDeal {
   store       Store    @relation(fields: [storeId], references: [id])
   productId   String?
   product     Product? @relation(fields: [productId], references: [id])
+  providerId  String   @default("seed-flipp")
+  providerRef String?
   title       String
   description String?
   salePrice   Float?
@@ -324,6 +326,7 @@ model WeeklyAdDeal {
   createdAt   DateTime @default(now())
 
   @@index([storeId])
+  @@index([providerId])
   @@index([validTo])
 }
 

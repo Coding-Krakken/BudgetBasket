@@ -127,8 +127,8 @@ export function calculateEffectivePrice(
         isFutureValue: true,
         requiresAction: true,
         actionDescription: rebate.requiresReceipt
-          ? `Submit receipt in ${rebate.providerId} app after purchase`
-          : `Claim in ${rebate.providerId} after purchase`,
+          ? `Submit receipt in ${formatProviderName(rebate.providerId)} after purchase`
+          : `Claim in ${formatProviderName(rebate.providerId)} after purchase`,
       });
     }
   }
@@ -166,6 +166,16 @@ export function calculateEffectivePrice(
     appliedOpportunities: appliedOps,
     warnings,
   };
+}
+
+function formatProviderName(providerId: string): string {
+  const providerNames: Record<string, string> = {
+    "seed-ibotta": "Ibotta",
+    "live-ibotta-api": "Ibotta",
+    "seed-fetch": "Fetch Rewards",
+  };
+
+  return providerNames[providerId] ?? providerId;
 }
 
 type ReductionResult = {

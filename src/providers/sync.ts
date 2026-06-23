@@ -6,13 +6,13 @@ import {
 } from "@prisma/client";
 import db from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { getProvider } from "./registry";
+import { getAllProviders, getProvider } from "./registry";
 import type { ProviderFetchResult } from "@/types";
 import type { ProviderOpportunityData, ProviderPriceData } from "./base";
 
 type SyncDbClient = Pick<
   PrismaClient,
-  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity"
+  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity" | "weeklyAdDeal"
 >;
 
 export interface ProviderSyncResult {
@@ -94,6 +94,13 @@ export async function syncProviderData(
       data: { isActive: false },
     });
 
+    if (provider.capabilities.weeklyAds) {
+      await database.weeklyAdDeal.updateMany({
+        where: { providerId: provider.id, isActive: true },
+        data: { isActive: false },
+      });
+    }
+
     for (const price of priceResult.data) {
       const productId = productIdBySlug.get(price.productSlug);
       const storeId = storeIdBySlug.get(price.storeSlug);
@@ -138,6 +145,7 @@ export async function syncProviderData(
           categorySlug: opportunity.categorySlug,
           brandSlug: opportunity.brandSlug,
           providerId: provider.id,
+          providerRef: opportunity.providerRef,
           valueType: opportunity.valueType,
           valueAmount: opportunity.valueAmount,
           valuePercent: opportunity.valuePercent,
@@ -153,12 +161,38 @@ export async function syncProviderData(
           confidenceLevel: toConfidenceLevel(opportunity.confidenceLevel),
           confidence: opportunity.confidence ?? 0.75,
           termsAndConditions: opportunity.termsAndConditions,
+          startsAt: opportunity.startsAt ?? null,
           expiresAt: opportunity.expiresAt ?? null,
           isActive: true,
           isVerified: opportunity.confidenceLevel === "OFFICIAL_API",
           isFeatured: opportunity.isFeatured ?? false,
         },
       });
+
+      if (opportunity.type === "WEEKLY_AD_DEAL" && storeId) {
+        const validFrom = opportunity.weeklyAd?.validFrom ?? opportunity.startsAt ?? new Date();
+        const validTo = opportunity.weeklyAd?.validTo ?? opportunity.expiresAt;
+
+        if (validTo) {
+          await database.weeklyAdDeal.create({
+            data: {
+              providerId: provider.id,
+              providerRef: opportunity.providerRef,
+              storeId,
+              productId,
+              title: opportunity.title,
+              description: opportunity.description,
+              salePrice: opportunity.weeklyAd?.salePrice ?? opportunity.valueAmount,
+              wasPrice: opportunity.weeklyAd?.wasPrice ?? null,
+              savings: opportunity.weeklyAd?.savings ?? null,
+              validFrom,
+              validTo,
+              pageNumber: opportunity.weeklyAd?.pageNumber ?? null,
+              isActive: true,
+            },
+          });
+        }
+      }
       opportunitiesIngested += 1;
     }
 
@@ -205,6 +239,90 @@ export async function syncProviderData(
   }
 }
 
+export interface ExpirationSweepResult {
+  expiredOpportunities: number;
+  expiredPriceObservations: number;
+  expiredWeeklyAdDeals: number;
+}
+
+export async function expireStaleOfferData(
+  options: { database?: Pick<PrismaClient, "opportunity" | "priceObservation" | "weeklyAdDeal">; now?: Date } = {}
+): Promise<ExpirationSweepResult> {
+  const database = options.database ?? db;
+  const now = options.now ?? new Date();
+
+  const [opportunities, priceObservations, weeklyAdDeals] = await Promise.all([
+    database.opportunity.updateMany({
+      where: {
+        isActive: true,
+        expiresAt: { lt: now },
+      },
+      data: { isActive: false },
+    }),
+    database.priceObservation.updateMany({
+      where: {
+        isActive: true,
+        expiresAt: { lt: now },
+      },
+      data: { isActive: false },
+    }),
+    database.weeklyAdDeal.updateMany({
+      where: {
+        isActive: true,
+        validTo: { lt: now },
+      },
+      data: { isActive: false },
+    }),
+  ]);
+
+  return {
+    expiredOpportunities: opportunities.count,
+    expiredPriceObservations: priceObservations.count,
+    expiredWeeklyAdDeals: weeklyAdDeals.count,
+  };
+}
+
+export interface ProviderSyncAllResult {
+  startedAt: string;
+  completedAt: string;
+  expirationSweep: ExpirationSweepResult;
+  results: ProviderSyncResult[];
+  consecutiveFailureAlerts: ProviderFailureAlert[];
+}
+
+export interface ProviderFailureAlert {
+  providerId: string;
+  providerName: string;
+  failedRuns: number;
+}
+
+export async function syncAllProviderData(
+  options: { database?: SyncDbClient; now?: Date } = {}
+): Promise<ProviderSyncAllResult> {
+  const database = options.database ?? db;
+  const startedAt = new Date();
+  const expirationSweep = await expireStaleOfferData({ database, now: options.now });
+  const providerIds = getAllProviders()
+    .filter(provider => provider.capabilities.prices || provider.capabilities.opportunities)
+    .map(provider => provider.id);
+
+  const results: ProviderSyncResult[] = [];
+  for (const providerId of providerIds) {
+    results.push(await syncProviderData(providerId, { database }));
+  }
+
+  const consecutiveFailureAlerts = await getConsecutiveFailureAlerts(database);
+  const completedAt = new Date();
+
+  return {
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    expirationSweep,
+    results,
+    consecutiveFailureAlerts,
+  };
+}
+
 function emptyFetchResult<T>(providerId: string): ProviderFetchResult<T> {
   return {
     providerId,
@@ -231,4 +349,33 @@ function toStackabilityRule(rule?: string): StackabilityRule {
   return rule && Object.values(StackabilityRule).includes(rule as StackabilityRule)
     ? (rule as StackabilityRule)
     : StackabilityRule.STANDALONE;
+}
+
+async function getConsecutiveFailureAlerts(
+  database: Pick<PrismaClient, "providerSyncRun">
+): Promise<ProviderFailureAlert[]> {
+  const providers = getAllProviders();
+  const alerts: ProviderFailureAlert[] = [];
+
+  for (const provider of providers) {
+    const recentRuns = await database.providerSyncRun.findMany({
+      where: { providerId: provider.id },
+      orderBy: { startedAt: "desc" },
+      take: 3,
+    });
+
+    if (recentRuns.length === 3 && recentRuns.every(run => run.status === "FAILED")) {
+      alerts.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        failedRuns: recentRuns.length,
+      });
+    }
+  }
+
+  if (alerts.length > 0) {
+    logger.error("provider_sync_consecutive_failures", { alerts });
+  }
+
+  return alerts;
 }

@@ -11,6 +11,8 @@ import { SeedWalmartProvider } from "./seed-walmart";
 import type { BaseProvider, ProviderOpportunityData, ProviderPriceData } from "./base";
 import { EnvCredentialStore } from "./credential-store";
 import { LiveKrogerProvider } from "./live-kroger";
+import { ManualWeeklyAdProvider } from "./manual-weekly-ads";
+import { SeedFetchRewardsProvider, SeedIbottaProvider } from "./seed-rebate-provider";
 
 const MOCK_PRODUCTS = [
   { id: "p1", slug: "whole-milk-gallon", name: "Whole Milk 1 Gallon", normalizedName: "whole milk 1 gallon" },
@@ -20,11 +22,15 @@ const MOCK_PRODUCTS = [
 
 const MOCK_STORES = [
   { id: "s1", slug: "walmart", name: "Walmart" },
+  { id: "s2", slug: "aldi", name: "Aldi" },
 ];
 
 // All concrete providers to contract-test
 const PROVIDERS: BaseProvider[] = [
   new SeedWalmartProvider(),
+  new ManualWeeklyAdProvider(),
+  new SeedIbottaProvider(),
+  new SeedFetchRewardsProvider(),
   new LiveKrogerProvider(new EnvCredentialStore({}), (() => {
     throw new Error("fetch should not be called without credentials");
   }) as unknown as typeof fetch),

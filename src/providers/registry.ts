@@ -2,6 +2,8 @@ import type { ProviderHealth } from "@/types";
 import { BaseProvider } from "./base";
 import { credentialStore } from "./credential-store";
 import { LiveKrogerProvider } from "./live-kroger";
+import { ManualWeeklyAdProvider } from "./manual-weekly-ads";
+import { SeedFetchRewardsProvider, SeedIbottaProvider } from "./seed-rebate-provider";
 import { SeedWalmartProvider } from "./seed-walmart";
 import db from "@/lib/db";
 
@@ -14,6 +16,9 @@ function registerProvider(provider: BaseProvider) {
 
 // Register all seed/demo providers
 registerProvider(new SeedWalmartProvider());
+registerProvider(new ManualWeeklyAdProvider());
+registerProvider(new SeedIbottaProvider());
+registerProvider(new SeedFetchRewardsProvider());
 
 const liveKrogerProvider = new LiveKrogerProvider(credentialStore);
 if (liveKrogerProvider.hasRequiredCredentials()) {

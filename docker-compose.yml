@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/cartwise
+      - NEXT_PUBLIC_APP_NAME=CartWise AI
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - cartwise
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: cartwise
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cartwise"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - cartwise
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    networks:
+      - cartwise
+    profiles:
+      - tools
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/cartwise
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cartwise
+    profiles:
+      - migrate
+
+volumes:
+  postgres_data:
+
+networks:
+  cartwise:
+    driver: bridge

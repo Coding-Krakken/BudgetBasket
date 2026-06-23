@@ -1,0 +1,511 @@
+// CartWise AI - Prisma Schema
+// Supports PostgreSQL (production) and SQLite (local demo fallback)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users & Households ───────────────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String?   @unique
+  name            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  household       Household? @relation(fields: [householdId], references: [id])
+  householdId     String?
+  preferences     UserPreferences?
+  cartPlans       CartPlan[]
+  receipts        Receipt[]
+  providerConnections ProviderConnection[]
+  auditLogs       AuditLog[]
+}
+
+model Household {
+  id          String   @id @default(cuid())
+  name        String   @default("My Household")
+  size        Int      @default(1)
+  zipCode     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+}
+
+model UserPreferences {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  maxStores             Int      @default(2)
+  hassleCostPerStore    Float    @default(5.0)
+  weeklyBudget          Float?
+  dietaryRestrictions   String[] @default([])
+  allowSubstitutions    Boolean  @default(true)
+  preferOrganic         Boolean  @default(false)
+  preferNameBrand       Boolean  @default(false)
+  loyaltyCards          String[] @default([])
+  defaultOptimizationMode String  @default("CHEAPEST")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ─── Stores ───────────────────────────────────────────────────────────────────
+
+model Store {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  name            String
+  chain           String
+  logoUrl         String?
+  primaryColor    String?
+  hasLoyaltyCard  Boolean         @default(false)
+  loyaltyCardName String?
+  acceptsMfgCoupons Boolean       @default(true)
+  hasDigitalCoupons Boolean       @default(false)
+  hasWeeklyAd     Boolean         @default(true)
+  hasFuelRewards  Boolean         @default(false)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  locations       StoreLocation[]
+  opportunities   Opportunity[]
+  priceObservations PriceObservation[]
+  weeklyAdDeals   WeeklyAdDeal[]
+
+  @@index([chain])
+}
+
+model StoreLocation {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  lat         Float?
+  lng         Float?
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([storeId])
+  @@index([zipCode])
+}
+
+// ─── Products ─────────────────────────────────────────────────────────────────
+
+model Category {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  parentId    String?
+  parent      Category? @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  products    Product[]
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  name        String
+  isNational  Boolean   @default(true)
+  products    Product[]
+}
+
+model Product {
+  id              String            @id @default(cuid())
+  slug            String            @unique
+  name            String
+  normalizedName  String
+  description     String?
+  brandId         String?
+  brand           Brand?            @relation(fields: [brandId], references: [id])
+  categoryId      String?
+  category        Category?         @relation(fields: [categoryId], references: [id])
+  imageUrl        String?
+  size            String?
+  unit            String?
+  unitQuantity    Float?
+  isOrganic       Boolean           @default(false)
+  isPrivateLabel  Boolean           @default(false)
+  averagePrice    Float?
+  historicalLow   Float?
+  historicalHigh  Float?
+  keywords        String[]          @default([])
+  substitutes     ProductSubstitute[] @relation("ProductSubstitutes")
+  substituteFor   ProductSubstitute[] @relation("SubstituteFor")
+  upcs            UPC[]
+  variants        ProductVariant[]
+  priceObservations PriceObservation[]
+  opportunities   Opportunity[]
+  weeklyAdDeals   WeeklyAdDeal[]
+  cartPlanItems   CartPlanItem[]
+  pantryItems     PantryItem[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([normalizedName])
+  @@index([categoryId])
+  @@index([brandId])
+}
+
+model ProductVariant {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  name        String
+  size        String?
+  unit        String?
+  unitQuantity Float?
+  upc         String?
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
+}
+
+model UPC {
+  id          String  @id @default(cuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  upc         String  @unique
+  isDefault   Boolean @default(false)
+
+  @@index([productId])
+}
+
+model ProductSubstitute {
+  id              String  @id @default(cuid())
+  productId       String
+  product         Product @relation("ProductSubstitutes", fields: [productId], references: [id])
+  substituteId    String
+  substitute      Product @relation("SubstituteFor", fields: [substituteId], references: [id])
+  savingsEstimate Float?
+  quality         String  @default("EQUAL")
+  notes           String?
+
+  @@unique([productId, substituteId])
+}
+
+// ─── Pricing & Observations ───────────────────────────────────────────────────
+
+model PriceObservation {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+  storeId         String
+  store           Store    @relation(fields: [storeId], references: [id])
+  price           Float
+  salePrice       Float?
+  unit            String?
+  unitPrice       Float?
+  currency        String   @default("USD")
+  source          String
+  confidence      Float    @default(0.75)
+  observedAt      DateTime @default(now())
+  expiresAt       DateTime?
+  isActive        Boolean  @default(true)
+
+  @@index([productId, storeId])
+  @@index([storeId])
+  @@index([observedAt])
+}
+
+// ─── Opportunities ────────────────────────────────────────────────────────────
+
+enum OpportunityType {
+  STORE_SALE
+  STORE_COUPON
+  MANUFACTURER_COUPON
+  DIGITAL_COUPON
+  LOYALTY_OFFER
+  REBATE
+  CASHBACK
+  BUY_X_GET_Y
+  BUY_X_SAVE_Y
+  SPEND_X_GET_REWARD
+  FUEL_REWARD
+  GIFT_CARD_REWARD
+  WEEKLY_AD_DEAL
+  CLEARANCE
+  MANAGER_SPECIAL
+  BUNDLE_DEAL
+}
+
+enum ConfidenceLevel {
+  CART_VALIDATED
+  OFFICIAL_API
+  CONNECTED_ACCOUNT
+  RECEIPT_VALIDATED
+  WEEKLY_AD
+  PUBLIC_PAGE
+  COMMUNITY_REPORT
+  SEED_DEMO
+  UNKNOWN
+}
+
+enum StackabilityRule {
+  STANDALONE
+  STACKABLE_WITH_STORE
+  STACKABLE_WITH_MFG
+  STACKABLE_WITH_ALL
+  NOT_STACKABLE
+}
+
+model Opportunity {
+  id                  String           @id @default(cuid())
+  type                OpportunityType
+  title               String
+  description         String?
+  storeId             String?
+  store               Store?           @relation(fields: [storeId], references: [id])
+  productId           String?
+  product             Product?         @relation(fields: [productId], references: [id])
+  categorySlug        String?
+  brandSlug           String?
+  providerId          String
+  providerRef         String?
+  valueType           String
+  valueAmount         Float
+  valuePercent        Float?
+  minimumQuantity     Int              @default(1)
+  maximumQuantity     Int?
+  requiresBuyQuantity Int?
+  getQuantity         Int?
+  minimumPurchase     Float?
+  stackability        StackabilityRule @default(STANDALONE)
+  isMfgCoupon         Boolean          @default(false)
+  requiresClipping    Boolean          @default(false)
+  requiresLoyaltyCard Boolean          @default(false)
+  requiresAccount     Boolean          @default(false)
+  requiresReceipt     Boolean          @default(false)
+  confidenceLevel     ConfidenceLevel  @default(SEED_DEMO)
+  confidence          Float            @default(0.75)
+  validationSource    String?
+  termsAndConditions  String?
+  startsAt            DateTime?
+  expiresAt           DateTime?
+  isActive            Boolean          @default(true)
+  isVerified          Boolean          @default(false)
+  isFeatured          Boolean          @default(false)
+  viewCount           Int              @default(0)
+  redemptionCount     Int              @default(0)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  cartPlanItems       CartPlanItem[]   @relation("AppliedOpportunities")
+
+  @@index([storeId])
+  @@index([productId])
+  @@index([type])
+  @@index([expiresAt])
+  @@index([confidenceLevel])
+}
+
+model WeeklyAdDeal {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  title       String
+  description String?
+  salePrice   Float?
+  wasPrice    Float?
+  savings     Float?
+  validFrom   DateTime
+  validTo     DateTime
+  pageNumber  Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([storeId])
+  @@index([validTo])
+}
+
+// ─── Cart Plans ───────────────────────────────────────────────────────────────
+
+enum OptimizationMode {
+  CHEAPEST
+  ONE_STORE
+  FASTEST
+  BEST_VERIFIED
+  STOCK_UP
+}
+
+model CartPlan {
+  id                    String           @id @default(cuid())
+  userId                String?
+  user                  User?            @relation(fields: [userId], references: [id])
+  name                  String?
+  rawInput              String
+  optimizationMode      OptimizationMode @default(CHEAPEST)
+  originalTotalCost     Float
+  optimizedTotalCost    Float
+  totalSavings          Float
+  savingsPercent        Float
+  overallConfidence     Float
+  storeCount            Int
+  itemCount             Int
+  appliedCouponCount    Int              @default(0)
+  appliedRebateCount    Int              @default(0)
+  explanationSummary    String?
+  warnings              String[]         @default([])
+  isSaved               Boolean          @default(false)
+  expiresAt             DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  items                 CartPlanItem[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model CartPlanItem {
+  id                    String        @id @default(cuid())
+  cartPlanId            String
+  cartPlan              CartPlan      @relation(fields: [cartPlanId], references: [id], onDelete: Cascade)
+  productId             String?
+  product               Product?      @relation(fields: [productId], references: [id])
+  rawInput              String
+  normalizedName        String
+  storeId               String?
+  quantity              Int           @default(1)
+  basePrice             Float
+  salePrice             Float?
+  effectivePrice        Float
+  totalBasePrice        Float
+  totalEffectivePrice   Float
+  totalSavings          Float
+  confidence            Float
+  isSubstitution        Boolean       @default(false)
+  substitutionNote      String?
+  actionsRequired       String[]      @default([])
+  expirationDates       String[]      @default([])
+  warnings              String[]      @default([])
+  appliedOpportunities  Opportunity[] @relation("AppliedOpportunities")
+  createdAt             DateTime      @default(now())
+
+  @@index([cartPlanId])
+}
+
+// ─── Receipts ─────────────────────────────────────────────────────────────────
+
+model Receipt {
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  storeId         String?
+  storeName       String?
+  imageUrl        String?
+  rawText         String?
+  totalAmount     Float?
+  purchaseDate    DateTime?
+  status          String            @default("PENDING")
+  parsedAt        DateTime?
+  validatedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  lineItems       ReceiptLineItem[]
+
+  @@index([userId])
+}
+
+model ReceiptLineItem {
+  id          String   @id @default(cuid())
+  receiptId   String
+  receipt     Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId   String?
+  rawText     String
+  quantity    Int      @default(1)
+  price       Float?
+  unitPrice   Float?
+  matched     Boolean  @default(false)
+  matchConf   Float?
+  createdAt   DateTime @default(now())
+
+  @@index([receiptId])
+}
+
+// ─── Pantry ───────────────────────────────────────────────────────────────────
+
+model PantryItem {
+  id              String   @id @default(cuid())
+  userId          String
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
+  name            String
+  quantity        Float
+  unit            String?
+  purchasedAt     DateTime?
+  expiresAt       DateTime?
+  daysRemaining   Int?
+  isRunningLow    Boolean  @default(false)
+  lastRestockedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ─── Provider Infrastructure ──────────────────────────────────────────────────
+
+model ProviderConnection {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  providerId      String
+  providerName    String
+  status          String    @default("DISCONNECTED")
+  accessToken     String?
+  refreshToken    String?
+  tokenExpiresAt  DateTime?
+  accountId       String?
+  accountEmail    String?
+  lastSyncedAt    DateTime?
+  syncError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, providerId])
+  @@index([userId])
+}
+
+model ProviderSyncRun {
+  id              String   @id @default(cuid())
+  providerId      String
+  providerName    String
+  status          String
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  itemsIngested   Int      @default(0)
+  itemsUpdated    Int      @default(0)
+  itemsFailed     Int      @default(0)
+  errorMessage    String?
+  metadata        Json?
+
+  @@index([providerId])
+  @@index([startedAt])
+}
+
+// ─── Audit & Telemetry ────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

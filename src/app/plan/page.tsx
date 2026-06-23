@@ -12,7 +12,18 @@ async function getStores() {
     return await db.store.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
-      select: { id: true, slug: true, name: true, chain: true, hasLoyaltyCard: true, loyaltyCardName: true },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        chain: true,
+        hasLoyaltyCard: true,
+        loyaltyCardName: true,
+        locations: {
+          where: { isActive: true },
+          select: { zipCode: true, lat: true, lng: true },
+        },
+      },
     });
   } catch {
     return [];

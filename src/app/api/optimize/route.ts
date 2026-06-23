@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
 
     const durationMs = Date.now() - t0;
     const primary = result.primaryScenario;
-    const matchedCount = primary.items.filter(i => i.product).length;
+    const matchedCount = primary.items.filter((i) => i.product).length;
 
     logger.info("optimization_completed", {
       mode,
@@ -159,7 +159,54 @@ export async function POST(request: NextRequest) {
       durationMs,
     });
 
-    const responseBody: Record<string, unknown> = { success: true, data: result };
+    // Persist plan to database (best-effort; never fails the response)
+    let planId: string | undefined;
+    try {
+      const plan = await db.cartPlan.create({
+        data: {
+          rawInput: shoppingList,
+          optimizationMode: mode as never,
+          originalTotalCost: primary.totalBasePrice,
+          optimizedTotalCost: primary.totalEffectivePrice,
+          totalSavings: primary.totalSavings,
+          savingsPercent: primary.savingsPercent,
+          overallConfidence: primary.overallConfidence,
+          storeCount: primary.storeCount,
+          itemCount: primary.items.length,
+          appliedCouponCount: primary.items.reduce(
+            (n, i) => n + i.appliedOpportunities.filter(o => !o.isFutureValue).length, 0
+          ),
+          appliedRebateCount: primary.items.reduce(
+            (n, i) => n + i.appliedOpportunities.filter(o => o.isFutureValue).length, 0
+          ),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          items: {
+            create: primary.items.map(item => ({
+              rawInput: item.raw,
+              normalizedName: item.normalized,
+              productId: item.product?.id ?? null,
+              storeId: item.storeId ?? null,
+              quantity: item.quantity,
+              basePrice: item.basePrice,
+              effectivePrice: item.effectivePrice,
+              totalBasePrice: item.totalBasePrice,
+              totalEffectivePrice: item.totalEffectivePrice,
+              totalSavings: item.totalSavings,
+              confidence: item.confidence,
+              actionsRequired: item.actionsRequired,
+              warnings: item.warnings,
+            })),
+          },
+        },
+      });
+      planId = plan.id;
+    } catch (planErr) {
+      logger.warn("cart_plan_persist_failed", {
+        error: planErr instanceof Error ? planErr.message : String(planErr),
+      });
+    }
+
+    const responseBody: Record<string, unknown> = { success: true, data: result, planId };
 
     if (debugMode) {
       responseBody.debug = {

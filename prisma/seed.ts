@@ -70,6 +70,39 @@ async function main() {
   }
   console.log(`  ✓ ${Object.keys(stores).length} stores`);
 
+  // ─── Store Locations (demo data — Columbus, OH metro area) ────────────────
+  const locationData: Array<{
+    slug: string; address: string; city: string; state: string;
+    zipCode: string; lat: number; lng: number;
+  }> = [
+    { slug: "walmart",   address: "1234 W Broad St",     city: "Columbus",    state: "OH", zipCode: "43215", lat: 39.9612, lng: -82.9988 },
+    { slug: "target",    address: "5678 Polaris Pkwy",    city: "Columbus",    state: "OH", zipCode: "43240", lat: 40.1467, lng: -82.9588 },
+    { slug: "kroger",    address: "910 W Fifth Ave",      city: "Columbus",    state: "OH", zipCode: "43212", lat: 39.9702, lng: -83.0224 },
+    { slug: "aldi",      address: "2345 Henderson Rd",    city: "Columbus",    state: "OH", zipCode: "43220", lat: 40.0295, lng: -83.0443 },
+    { slug: "wegmans",   address: "7890 Sawmill Rd",      city: "Dublin",      state: "OH", zipCode: "43016", lat: 40.1003, lng: -83.1224 },
+    { slug: "cvs",       address: "321 High St",          city: "Columbus",    state: "OH", zipCode: "43215", lat: 39.9583, lng: -82.9985 },
+    { slug: "walgreens", address: "654 N High St",        city: "Columbus",    state: "OH", zipCode: "43215", lat: 39.9761, lng: -82.9987 },
+    { slug: "costco",    address: "1234 Stringtown Rd",   city: "Grove City",  state: "OH", zipCode: "43123", lat: 39.8784, lng: -83.0935 },
+  ];
+  for (const loc of locationData) {
+    await prisma.storeLocation.upsert({
+      where: { id: `loc-${loc.slug}` },
+      update: { lat: loc.lat, lng: loc.lng, zipCode: loc.zipCode },
+      create: {
+        id: `loc-${loc.slug}`,
+        storeId: stores[loc.slug],
+        address: loc.address,
+        city: loc.city,
+        state: loc.state,
+        zipCode: loc.zipCode,
+        lat: loc.lat,
+        lng: loc.lng,
+        isActive: true,
+      },
+    });
+  }
+  console.log(`  ✓ ${locationData.length} store locations`);
+
   // ─── Products ──────────────────────────────────────────────────────────────
   const productData = [
     // Dairy

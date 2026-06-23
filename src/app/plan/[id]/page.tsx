@@ -74,7 +74,7 @@ export default async function PlanDetailPage({
       : plan.overallConfidence >= 0.85
       ? "OFFICIAL_API"
       : plan.overallConfidence >= 0.75
-      ? "SEED_DEMO"
+      ? "PUBLIC_PAGE"
       : "UNKNOWN";
   const confidenceLabel = getConfidenceLabel(confidenceLevel);
 

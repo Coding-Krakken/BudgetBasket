@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
-  PlugZap, CheckCircle2, Clock, AlertCircle,
+  PlugZap, CheckCircle2, Clock, AlertCircle, WifiOff,
   Link as LinkIcon, ShoppingCart, Tag, Receipt, Store,
 } from "lucide-react";
 import { getProviderHealthSummary } from "@/providers/registry";
@@ -38,20 +38,20 @@ const TYPE_ICONS: Record<ProviderType, React.ElementType> = {
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "ACTIVE") return <Badge variant="verified" className="text-[10px]"><CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />Active</Badge>;
-  if (status === "DEMO") return <Badge variant="demo" className="text-[10px]">Demo Data</Badge>;
-  if (status === "PENDING") return <Badge variant="outline" className="text-[10px]"><Clock className="h-2.5 w-2.5 mr-0.5" />Coming Soon</Badge>;
+  if (status === "PENDING") return <Badge variant="outline" className="text-[10px]"><Clock className="h-2.5 w-2.5 mr-0.5" />Needs Setup</Badge>;
   if (status === "DEGRADED") return <Badge variant="warning-muted" className="text-[10px]"><AlertCircle className="h-2.5 w-2.5 mr-0.5" />Degraded</Badge>;
-  return <Badge variant="destructive" className="text-[10px]">Offline</Badge>;
+  return <Badge variant="destructive" className="text-[10px]"><WifiOff className="h-2.5 w-2.5 mr-0.5" />Offline</Badge>;
 }
 
 export default function IntegrationsPage() {
   const providers = getProviderHealthSummary();
 
-  const demoProviders = providers.filter(p => p.status === "DEMO");
-  const pendingProviders = providers.filter(p => p.status === "PENDING");
+  const activeCount = providers.filter(p => p.status === "ACTIVE").length;
+  const pendingCount = providers.filter(p => p.status === "PENDING").length;
+  const offlineCount = providers.filter(p => p.status !== "ACTIVE" && p.status !== "PENDING").length;
 
   const byType: Record<string, typeof providers> = {};
-  for (const p of demoProviders) {
+  for (const p of providers) {
     const key = p.type as string;
     if (!byType[key]) byType[key] = [];
     byType[key].push(p);
@@ -68,8 +68,9 @@ export default function IntegrationsPage() {
           Connect your accounts, loyalty cards, and rebate apps to unlock personalized savings.
         </p>
         <div className="flex gap-2 mt-3">
-          <Badge variant="demo">{demoProviders.length} Demo Providers Active</Badge>
-          <Badge variant="outline">{pendingProviders.length} Coming Soon</Badge>
+          <Badge variant="verified">{activeCount} Active</Badge>
+          <Badge variant="outline">{pendingCount} Need Setup</Badge>
+          {offlineCount > 0 && <Badge variant="destructive">{offlineCount} Offline</Badge>}
         </div>
       </div>
 
@@ -79,7 +80,7 @@ export default function IntegrationsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { label: "Retailers", count: providers.filter(p => p.type === "RETAILER").length, icon: Store },
-              { label: "Rebate Apps", count: providers.filter(p => p.type === "REBATE_APP").length, icon: Receipt },
+              { label: "Rebate Apps", count: providers.filter(p => p.type === "REBATE_APP" || p.type === "CASHBACK_APP").length, icon: Receipt },
               { label: "Coupon Networks", count: providers.filter(p => p.type === "COUPON_NETWORK").length, icon: Tag },
               { label: "Weekly Ads", count: providers.filter(p => p.type === "WEEKLY_AD").length, icon: ShoppingCart },
             ].map(s => {
@@ -100,9 +101,9 @@ export default function IntegrationsPage() {
         </CardContent>
       </Card>
 
-      {/* Active Demo Providers */}
+      {/* Providers by type */}
       <div className="space-y-6 mb-8">
-        <h2 className="text-lg font-semibold">Active Data Providers</h2>
+        <h2 className="text-lg font-semibold">Data Providers</h2>
         {Object.entries(byType).map(([type, providerList]) => {
           const TypeIcon = TYPE_ICONS[type as ProviderType] ?? Store;
           return (
@@ -113,7 +114,7 @@ export default function IntegrationsPage() {
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 {providerList.map(p => (
-                  <Card key={p.providerId}>
+                  <Card key={p.providerId} className={p.status !== "ACTIVE" ? "opacity-80" : undefined}>
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
@@ -128,12 +129,14 @@ export default function IntegrationsPage() {
                             {p.capabilities.receiptValidation && <Badge variant="outline" className="text-[10px]">Receipts</Badge>}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {p.itemCount} offers loaded · Last sync: just now
+                            {p.status === "ACTIVE"
+                              ? `${p.itemCount} offers loaded`
+                              : "Configure credentials in .env to activate"}
                           </p>
                         </div>
                         <Button variant="outline" size="sm" disabled className="gap-1 text-xs">
                           <LinkIcon className="h-3 w-3" />
-                          Connect
+                          {p.status === "ACTIVE" ? "Connected" : "Configure"}
                         </Button>
                       </div>
                     </CardContent>
@@ -147,53 +150,8 @@ export default function IntegrationsPage() {
 
       <Separator className="mb-6" />
 
-      {/* Coming Soon */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Coming Soon</h2>
-        <p className="text-sm text-muted-foreground">
-          These integrations are planned for future releases. Real-time data, account linking, and personalized offers.
-        </p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {pendingProviders.map(p => (
-            <Card key={p.providerId} className="border-dashed opacity-70">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-sm">{p.providerName}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{TYPE_LABELS[p.type as ProviderType] ?? p.type}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <StatusBadge status={p.status} />
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" disabled className="text-xs">
-                    Coming Soon
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {/* Additional future providers */}
-          {[
-            { name: "Ibotta Account Linking", type: "Sync personal rebates" },
-            { name: "Kroger Plus Account", type: "Real-time personalized offers" },
-            { name: "Target Circle Account", type: "Account-specific discounts" },
-            { name: "CVS ExtraCare Account", type: "ExtraBucks tracking" },
-            { name: "Checkout 51", type: "Receipt rebate app" },
-            { name: "Shopmium", type: "In-store rebates" },
-          ].map(item => (
-            <Card key={item.name} className="border-dashed opacity-50">
-              <CardContent className="p-4">
-                <p className="font-medium text-sm">{item.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">{item.type}</p>
-                <Badge variant="outline" className="text-[10px] mt-2">Planned</Badge>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
       {/* OAuth Note */}
-      <Card className="mt-6 bg-muted/30">
+      <Card className="bg-muted/30">
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -202,7 +160,7 @@ export default function IntegrationsPage() {
           <CardDescription className="text-xs">
             Account linking uses secure OAuth 2.0 — we never store your store passwords.
             Connected accounts enable personalized deals, loyalty tracking, and receipt validation.
-            CartWise only reads offer and loyalty data — never your payment information.
+            BudgetBasket only reads offer and loyalty data — never your payment information.
           </CardDescription>
         </CardHeader>
       </Card>

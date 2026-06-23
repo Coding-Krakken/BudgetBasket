@@ -34,7 +34,7 @@ async function getDiagnostics() {
 }
 
 function StatusIcon({ status }: { status: string }) {
-  if (status === "SUCCESS" || status === "ACTIVE" || status === "DEMO") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (status === "SUCCESS" || status === "ACTIVE") return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
   if (status === "PENDING") return <Clock className="h-4 w-4 text-amber-500" />;
   return <AlertCircle className="h-4 w-4 text-destructive" />;
 }
@@ -43,8 +43,8 @@ export default async function AdminProvidersPage() {
   const { syncRuns, opportunityStats, priceStats } = await getDiagnostics();
   const providers = getProviderHealthSummary();
 
-  const demoProviders = providers.filter(p => p.isDemo);
-  const pendingProviders = providers.filter(p => !p.isDemo);
+  const activeProviders = providers.filter(p => p.status === "ACTIVE");
+  const pendingProviders = providers.filter(p => p.status !== "ACTIVE");
 
   const confLevelCounts = opportunityStats.reduce<Record<string, number>>((acc, s) => {
     acc[s.confidenceLevel] = (acc[s.confidenceLevel] ?? 0) + s._count.id;
@@ -71,8 +71,8 @@ export default async function AdminProvidersPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <Card>
           <CardContent className="p-4">
-            <p className="text-2xl font-bold">{demoProviders.length}</p>
-            <p className="text-xs text-muted-foreground">Demo Providers Active</p>
+            <p className="text-2xl font-bold">{activeProviders.length}</p>
+            <p className="text-xs text-muted-foreground">Providers Active</p>
           </CardContent>
         </Card>
         <Card>
@@ -106,7 +106,7 @@ export default async function AdminProvidersPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {[...demoProviders, ...pendingProviders].map(p => (
+              {[...activeProviders, ...pendingProviders].map(p => (
                 <div key={p.providerId} className="flex items-center justify-between gap-3 py-2 border-b last:border-0">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <StatusIcon status={p.status} />
@@ -119,7 +119,7 @@ export default async function AdminProvidersPage() {
                     {p.syncCapable && (
                       <Badge variant="verified" className="text-[10px]">Sync</Badge>
                     )}
-                    <Badge variant={p.status === "DEMO" ? "demo" : p.status === "PENDING" ? "outline" : "verified"} className="text-[10px]">
+                    <Badge variant={p.status === "ACTIVE" ? "verified" : p.status === "PENDING" ? "outline" : "destructive"} className="text-[10px]">
                       {p.status}
                     </Badge>
                   </div>
@@ -158,7 +158,7 @@ export default async function AdminProvidersPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground py-4 text-center">No sync runs yet. Run db:seed to populate.</p>
+              <p className="text-sm text-muted-foreground py-4 text-center">No sync runs yet. Trigger a provider sync to start.</p>
             )}
           </CardContent>
         </Card>
@@ -189,7 +189,7 @@ export default async function AdminProvidersPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No data available. Run db:seed first.</p>
+              <p className="text-sm text-muted-foreground">No data yet. Trigger a provider sync to populate.</p>
             )}
           </CardContent>
         </Card>
@@ -220,7 +220,7 @@ export default async function AdminProvidersPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No data available. Run db:seed first.</p>
+              <p className="text-sm text-muted-foreground">No data yet. Trigger a provider sync to populate.</p>
             )}
           </CardContent>
         </Card>
@@ -245,7 +245,7 @@ export default async function AdminProvidersPage() {
             </div>
             <div>
               <p className="text-muted-foreground">Data Mode</p>
-              <p className="font-mono font-medium">DEMO / SEED</p>
+              <p className="font-mono font-medium">LIVE</p>
             </div>
           </div>
         </CardContent>

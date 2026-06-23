@@ -150,7 +150,11 @@ interface OptimizeInput {
     storeId: string;
     price: number;
     salePrice?: number | null;
+    unit?: string | null;
+    unitPrice?: number | null;
+    source?: string | null;
     confidence: number;
+    observedAt?: Date | string | null;
   }>;
   mode: OptimizationMode;
   maxStores?: number;
@@ -172,13 +176,17 @@ export async function optimizeBasket(input: OptimizeInput): Promise<Optimization
   }
 
   // Build price map: productId -> storeId -> observation
-  const priceMap = new Map<string, Map<string, { price: number; salePrice?: number | null; confidence: number }>>();
+  const priceMap = new Map<string, Map<string, PriceObservationInput>>();
   for (const obs of priceObservations) {
     if (!priceMap.has(obs.productId)) priceMap.set(obs.productId, new Map());
     priceMap.get(obs.productId)!.set(obs.storeId, {
       price: obs.price,
       salePrice: obs.salePrice,
+      unit: obs.unit,
+      unitPrice: obs.unitPrice,
+      source: obs.source,
       confidence: obs.confidence,
+      observedAt: obs.observedAt,
     });
   }
 
@@ -222,10 +230,18 @@ export async function optimizeBasket(input: OptimizeInput): Promise<Optimization
       quantity: item.quantity,
       basePrice: best.basePrice,
       salePrice: best.salePrice ?? null,
+      immediatePrice: best.immediatePrice,
       effectivePrice: best.effectivePrice,
       totalBasePrice: best.basePrice * item.quantity,
+      totalImmediatePrice: best.immediatePrice * item.quantity,
       totalEffectivePrice: best.effectivePrice * item.quantity,
+      immediateSavings: best.immediateSavings * item.quantity,
+      futureValue: best.futureValue * item.quantity,
       totalSavings: (best.basePrice - best.effectivePrice) * item.quantity,
+      unitPrice: best.unitPrice,
+      isBestUnitPrice: best.isBestUnitPrice,
+      priceSource: best.priceSource,
+      observedAt: best.observedAt ? new Date(best.observedAt) : null,
       confidence: best.confidence,
       appliedOpportunities: best.appliedOpportunities,
       isSubstitution: false,
@@ -242,7 +258,14 @@ interface StoreCandidate {
   storeId: string;
   basePrice: number;
   salePrice?: number | null;
+  immediatePrice: number;
   effectivePrice: number;
+  immediateSavings: number;
+  futureValue: number;
+  unitPrice?: CartPlanItem["unitPrice"];
+  isBestUnitPrice?: boolean;
+  priceSource?: string | null;
+  observedAt?: Date | string | null;
   confidence: number;
   appliedOpportunities: CartPlanItem["appliedOpportunities"];
   actionsRequired: string[];
@@ -250,12 +273,22 @@ interface StoreCandidate {
   expirationDates: string[];
 }
 
+type PriceObservationInput = {
+  price: number;
+  salePrice?: number | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  source?: string | null;
+  confidence: number;
+  observedAt?: Date | string | null;
+};
+
 function buildStoreCandidates(
   product: Product,
   quantity: number,
   stores: Store[],
   opportunities: Opportunity[],
-  priceMap: Map<string, Map<string, { price: number; salePrice?: number | null; confidence: number }>>,
+  priceMap: Map<string, Map<string, PriceObservationInput>>,
   _mode: OptimizationMode
 ): StoreCandidate[] {
   const candidates: StoreCandidate[] = [];
@@ -289,12 +322,20 @@ function buildStoreCandidates(
     });
 
     const confidence = combineConfidence([obsConfidence, ...oppConfidences]);
+    const unitPrice = calculateUnitPriceInfo(product, priceResult.effectivePrice, priceObs);
 
     candidates.push({
       storeId: store.id,
       basePrice,
       salePrice,
+      immediatePrice: Math.max(priceResult.basePrice - priceResult.immediateReduction, 0),
       effectivePrice: priceResult.effectivePrice,
+      immediateSavings: priceResult.immediateReduction,
+      futureValue: priceResult.futureValue,
+      unitPrice,
+      isBestUnitPrice: false,
+      priceSource: priceObs?.source ?? null,
+      observedAt: priceObs?.observedAt ?? null,
       confidence,
       appliedOpportunities: priceResult.appliedOpportunities.map(ao => {
         const opp = eligibleOpps.find(o => o.id === ao.opportunityId);
@@ -316,6 +357,18 @@ function buildStoreCandidates(
         .filter(o => o.expiresAt)
         .map(o => `${o.title}: expires ${new Date(o.expiresAt!).toLocaleDateString()}`),
     });
+  }
+
+  const unitPrices = candidates
+    .map(candidate => candidate.unitPrice?.price)
+    .filter((price): price is number => typeof price === "number" && Number.isFinite(price));
+  const bestUnitPrice = unitPrices.length > 0 ? Math.min(...unitPrices) : null;
+
+  if (bestUnitPrice != null) {
+    for (const candidate of candidates) {
+      candidate.isBestUnitPrice = candidate.unitPrice != null
+        && Math.abs(candidate.unitPrice.price - bestUnitPrice) < 0.0001;
+    }
   }
 
   return candidates;
@@ -362,7 +415,13 @@ function selectBestCandidate(
     }
 
     case "STOCK_UP": {
-      // Lowest effective price, favor items at/near historical low
+      const withUnitPrice = candidates.filter(c => c.unitPrice);
+      if (withUnitPrice.length > 0) {
+        return withUnitPrice.sort((a, b) =>
+          (a.unitPrice?.price ?? Number.POSITIVE_INFINITY) -
+          (b.unitPrice?.price ?? Number.POSITIVE_INFINITY)
+        )[0];
+      }
       return sortedByEffective[0];
     }
 
@@ -381,10 +440,18 @@ function buildUnmatchedItem(item: ShoppingListItem): CartPlanItem {
     quantity: item.quantity,
     basePrice: 0,
     salePrice: null,
+    immediatePrice: 0,
     effectivePrice: 0,
     totalBasePrice: 0,
+    totalImmediatePrice: 0,
     totalEffectivePrice: 0,
+    immediateSavings: 0,
+    futureValue: 0,
     totalSavings: 0,
+    unitPrice: null,
+    isBestUnitPrice: false,
+    priceSource: null,
+    observedAt: null,
     confidence: 0,
     appliedOpportunities: [],
     isSubstitution: false,
@@ -400,7 +467,10 @@ function buildScenario(
   stores: Store[]
 ): OptimizationScenario {
   const totalBasePrice = items.reduce((s, i) => s + i.totalBasePrice, 0);
+  const totalImmediatePrice = items.reduce((s, i) => s + i.totalImmediatePrice, 0);
   const totalEffectivePrice = items.reduce((s, i) => s + i.totalEffectivePrice, 0);
+  const totalImmediateSavings = items.reduce((s, i) => s + i.immediateSavings, 0);
+  const totalFutureValue = items.reduce((s, i) => s + i.futureValue, 0);
   const totalSavings = totalBasePrice - totalEffectivePrice;
   const savingsPercent = totalBasePrice > 0 ? (totalSavings / totalBasePrice) * 100 : 0;
 
@@ -435,7 +505,11 @@ function buildScenario(
     label: modeLabels[mode],
     description: modeDescriptions[mode],
     totalBasePrice,
+    totalImmediatePrice,
     totalEffectivePrice,
+    totalImmediateSavings,
+    totalFutureValue,
+    totalValue: totalImmediateSavings + totalFutureValue,
     totalSavings,
     savingsPercent,
     storeCount: stores.length,
@@ -445,6 +519,70 @@ function buildScenario(
     warnings,
     explanation: generateExplanation(mode, items, stores, totalSavings, overallConfidence),
   };
+}
+
+function calculateUnitPriceInfo(
+  product: Product,
+  effectivePrice: number,
+  priceObs?: PriceObservationInput
+): CartPlanItem["unitPrice"] {
+  if (priceObs?.unitPrice && priceObs.unitPrice > 0) {
+    const unit = normalizeUnitName(priceObs.unit ?? product.unit ?? "unit");
+    return {
+      price: priceObs.unitPrice,
+      unit,
+      label: `${priceObs.unitPrice.toFixed(2)} per ${unit}`,
+    };
+  }
+
+  const normalized = normalizeUnitQuantity(product.unitQuantity ?? null, product.unit ?? priceObs?.unit ?? null);
+  if (!normalized || normalized.quantity <= 0 || effectivePrice <= 0) return null;
+
+  const price = effectivePrice / normalized.quantity;
+  return {
+    price,
+    unit: normalized.unit,
+    label: `${price.toFixed(2)} per ${normalized.unit}`,
+  };
+}
+
+function normalizeUnitQuantity(quantity: number | null, unit: string | null) {
+  if (!quantity || !unit) return null;
+  const normalizedUnit = unit.trim().toLowerCase();
+
+  if (["lb", "lbs", "pound", "pounds"].includes(normalizedUnit)) {
+    return { quantity: quantity * 16, unit: "oz" };
+  }
+  if (["oz", "ounce", "ounces"].includes(normalizedUnit)) {
+    return { quantity, unit: "oz" };
+  }
+  if (["count", "ct", "each", "ea", "unit", "units"].includes(normalizedUnit)) {
+    return { quantity, unit: "ct" };
+  }
+  if (["ml", "milliliter", "milliliters"].includes(normalizedUnit)) {
+    return { quantity: quantity / 29.5735, unit: "fl oz" };
+  }
+  if (["l", "liter", "liters"].includes(normalizedUnit)) {
+    return { quantity: quantity * 33.814, unit: "fl oz" };
+  }
+  if (["fl oz", "floz", "fluid ounce", "fluid ounces"].includes(normalizedUnit)) {
+    return { quantity, unit: "fl oz" };
+  }
+  if (["gal", "gallon", "gallons"].includes(normalizedUnit)) {
+    return { quantity: quantity * 128, unit: "fl oz" };
+  }
+
+  return { quantity, unit: normalizeUnitName(unit) };
+}
+
+function normalizeUnitName(unit: string) {
+  const normalizedUnit = unit.trim().toLowerCase();
+  if (["lb", "lbs", "pound", "pounds"].includes(normalizedUnit)) return "oz";
+  if (["count", "ct", "each", "ea", "unit", "units"].includes(normalizedUnit)) return "ct";
+  if (["ml", "milliliter", "milliliters", "l", "liter", "liters", "gal", "gallon", "gallons"].includes(normalizedUnit)) {
+    return "fl oz";
+  }
+  return normalizedUnit || "unit";
 }
 
 function generateExplanation(
@@ -490,7 +628,11 @@ function emptyScenario(mode: OptimizationMode, items: ShoppingListItem[]): Optim
     label: "No Results",
     description: "No stores available for optimization",
     totalBasePrice: 0,
+    totalImmediatePrice: 0,
     totalEffectivePrice: 0,
+    totalImmediateSavings: 0,
+    totalFutureValue: 0,
+    totalValue: 0,
     totalSavings: 0,
     savingsPercent: 0,
     storeCount: 0,

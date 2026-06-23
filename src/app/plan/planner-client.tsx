@@ -24,17 +24,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import { formatCurrency, formatPercent, formatRelativeTime, cn } from "@/lib/utils";
-import { getConfidenceColor, getConfidenceLabel, getSavingsClaimLanguage } from "@/engine/confidence";
+import {
+  CONFIDENCE_DESCRIPTIONS,
+  getConfidenceColor,
+  getConfidenceLabel,
+  getPriceClaimLanguage,
+  getSavingsClaimLanguage,
+} from "@/engine/confidence";
 import { lookupZip, haversineDistanceMiles, isZipKnown } from "@/lib/zipcode";
 import type { OptimizationResult, OptimizationScenario, CartPlanItem, OptimizationMode } from "@/types";
 
 const PREFS_KEY = "cartwise:prefs";
 const PLANS_KEY = "cartwise:plans";
+const ACTIONS_KEY = "cartwise:plan-actions";
 
 interface StoreShape {
   id: string;
@@ -114,6 +120,21 @@ function savePlanId(planId: string) {
   } catch { /* ignore */ }
 }
 
+function loadActionState(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(ACTIONS_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveActionState(state: Record<string, boolean>) {
+  try {
+    localStorage.setItem(ACTIONS_KEY, JSON.stringify(state));
+  } catch { /* ignore */ }
+}
+
 function filterStoresByLocation(
   stores: StoreShape[],
   zipCode: string,
@@ -145,6 +166,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
   const [zipInput, setZipInput] = useState("");
   const [zipError, setZipError] = useState("");
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [actionState, setActionState] = useState<Record<string, boolean>>({});
 
   // Load preferences on mount
   useEffect(() => {
@@ -152,6 +174,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
     setPrefs(p);
     setMode(p.defaultOptimizationMode);
     setZipInput(p.zipCode ?? "");
+    setActionState(loadActionState());
     setPrefsLoaded(true);
   }, []);
 
@@ -236,6 +259,14 @@ export function PlannerClient({ stores }: PlannerClientProps) {
       const next = new Set(prev);
       if (next.has(idx)) next.delete(idx);
       else next.add(idx);
+      return next;
+    });
+  };
+
+  const setActionDone = (key: string, done: boolean) => {
+    setActionState(prev => {
+      const next = { ...prev, [key]: done };
+      saveActionState(next);
       return next;
     });
   };
@@ -477,19 +508,19 @@ export function PlannerClient({ stores }: PlannerClientProps) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <SummaryMetric label="Original Estimate" value={formatCurrency(primaryScenario.totalBasePrice)} />
                 <SummaryMetric
-                  label="Optimized Total"
-                  value={formatCurrency(primaryScenario.totalEffectivePrice)}
+                  label="Checkout Total"
+                  value={formatCurrency(primaryScenario.totalImmediatePrice)}
                   highlight="savings"
                 />
                 <SummaryMetric
                   label={getSavingsClaimLanguage(primaryScenario.overallConfidence)}
-                  value={`${formatCurrency(primaryScenario.totalSavings)} (${formatPercent(primaryScenario.savingsPercent, 0)})`}
+                  value={`${formatCurrency(primaryScenario.totalImmediateSavings)} (${formatPercent(primaryScenario.totalBasePrice > 0 ? (primaryScenario.totalImmediateSavings / primaryScenario.totalBasePrice) * 100 : 0, 0)})`}
                   highlight="primary"
                 />
                 <SummaryMetric
-                  label="Overall Confidence"
-                  value={formatPercent(primaryScenario.overallConfidence * 100, 0)}
-                  subtext={getConfidenceLabel(primaryScenario.overallConfidence >= 0.85 ? "OFFICIAL_API" : primaryScenario.overallConfidence >= 0.75 ? "SEED_DEMO" : "UNKNOWN")}
+                  label="After Rebates"
+                  value={formatCurrency(primaryScenario.totalEffectivePrice)}
+                  subtext={primaryScenario.totalFutureValue > 0 ? `You'll earn ${formatCurrency(primaryScenario.totalFutureValue)}` : "No pending rewards"}
                 />
               </div>
 
@@ -561,7 +592,13 @@ export function PlannerClient({ stores }: PlannerClientProps) {
 
             {result.scenarios.map(scenario => (
               <TabsContent key={scenario.mode} value={scenario.mode}>
-                <ScenarioView scenario={scenario} expandedItems={expandedItems} onToggleItem={toggleItem} />
+                <ScenarioView
+                  scenario={scenario}
+                  expandedItems={expandedItems}
+                  onToggleItem={toggleItem}
+                  actionState={actionState}
+                  onSetActionDone={setActionDone}
+                />
               </TabsContent>
             ))}
           </Tabs>
@@ -627,16 +664,27 @@ function ScenarioView({
   scenario,
   expandedItems,
   onToggleItem,
+  actionState,
+  onSetActionDone,
 }: {
   scenario: OptimizationScenario;
   expandedItems: Set<number>;
   onToggleItem: (idx: number) => void;
+  actionState: Record<string, boolean>;
+  onSetActionDone: (key: string, done: boolean) => void;
 }) {
+  const trackedActions = getTrackedActions(scenario);
+
   return (
     <div className="space-y-4 mt-4">
       <div className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/50 border">
-        <p className="font-medium text-foreground mb-1">{scenario.label}</p>
-        {scenario.explanation}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="font-medium text-foreground mb-1">{scenario.label}</p>
+            {scenario.explanation}
+          </div>
+          <ConfidenceBadge confidence={scenario.overallConfidence} />
+        </div>
       </div>
 
       {/* Items by store */}
@@ -661,9 +709,10 @@ function ScenarioView({
                   <CartItemRow
                     key={scenario.items.indexOf(item)}
                     item={item}
-                    globalIndex={scenario.items.indexOf(item)}
                     expanded={expandedItems.has(scenario.items.indexOf(item))}
                     onToggle={() => onToggleItem(scenario.items.indexOf(item))}
+                    actionState={actionState}
+                    onSetActionDone={onSetActionDone}
                   />
                 ))}
               </div>
@@ -691,30 +740,12 @@ function ScenarioView({
         </div>
       )}
 
-      {/* Actions Required */}
-      {scenario.items.some(i => i.actionsRequired.length > 0) && (
-        <Card className="bg-primary/5 border-primary/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-1.5">
-              <Tag className="h-4 w-4 text-primary" />
-              Actions Required to Capture Savings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ul className="space-y-1.5">
-              {scenario.items.flatMap(item =>
-                item.actionsRequired
-                  .filter(Boolean)
-                  .map((action, i) => (
-                    <li key={`${item.normalized}-${i}`} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                      <span><span className="font-medium">{item.product?.name ?? item.raw}:</span> {action}</span>
-                    </li>
-                  ))
-              )}
-            </ul>
-          </CardContent>
-        </Card>
+      {trackedActions.length > 0 && (
+        <ActionTracker
+          actions={trackedActions}
+          actionState={actionState}
+          onSetActionDone={onSetActionDone}
+        />
       )}
     </div>
   );
@@ -722,16 +753,19 @@ function ScenarioView({
 
 function CartItemRow({
   item,
-  globalIndex,
   expanded,
   onToggle,
+  actionState,
+  onSetActionDone,
 }: {
   item: CartPlanItem;
-  globalIndex: number;
   expanded: boolean;
   onToggle: () => void;
+  actionState: Record<string, boolean>;
+  onSetActionDone: (key: string, done: boolean) => void;
 }) {
   const hasDetails = item.appliedOpportunities.length > 0 || item.actionsRequired.length > 0 || item.warnings.length > 0;
+  const priceClaim = getPriceClaimLanguage(item.confidence);
 
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
@@ -765,15 +799,16 @@ function CartItemRow({
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
             <p className="font-bold text-sm">
-              {item.totalEffectivePrice > 0 ? formatCurrency(item.totalEffectivePrice) : "—"}
+              {item.totalImmediatePrice > 0 ? formatCurrency(item.totalImmediatePrice) : "—"}
             </p>
-            {item.totalSavings > 0 && (
-              <p className="text-xs text-savings">-{formatCurrency(item.totalSavings)}</p>
+            {item.immediateSavings > 0 && (
+              <p className="text-xs text-savings">-{formatCurrency(item.immediateSavings)} now</p>
+            )}
+            {item.futureValue > 0 && (
+              <p className="text-xs text-blue-600">+{formatCurrency(item.futureValue)} later</p>
             )}
           </div>
-          <div className={cn("px-1.5 py-0.5 rounded text-[10px] border", getConfidenceColor(item.confidence))}>
-            {Math.round(item.confidence * 100)}%
-          </div>
+          <ConfidenceBadge confidence={item.confidence} source={item.priceSource} observedAt={item.observedAt} compact />
           {hasDetails && (
             expanded
               ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -787,16 +822,40 @@ function CartItemRow({
           {item.appliedOpportunities.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Savings Applied</p>
+              <div className="grid gap-2 rounded-md border bg-background p-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">{priceClaim}</span>
+                  <span className="font-medium">
+                    {formatCurrency(item.immediatePrice)}
+                    {item.futureValue > 0 ? ` checkout, ${formatCurrency(item.effectivePrice)} after rebates` : ""}
+                  </span>
+                </div>
+                {item.unitPrice && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Unit price</span>
+                    <span className="font-medium">
+                      {formatCurrency(item.unitPrice.price)} / {item.unitPrice.unit}
+                      {item.isBestUnitPrice && (
+                        <Badge variant="savings-muted" className="ml-1 text-[10px]">Best unit price</Badge>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
               {item.appliedOpportunities.map((ao, i) => (
                 <div key={i} className="flex items-start justify-between gap-2 text-xs">
                   <div className="flex-1">
                     <p className="font-medium">{ao.opportunity?.title ?? "Offer"}</p>
-                    {ao.requiresAction && ao.actionDescription && (
-                      <p className="text-amber-700 flex items-center gap-1 mt-0.5">
-                        <Tag className="h-3 w-3" />
-                        {ao.actionDescription}
-                      </p>
-                    )}
+                    {ao.requiresAction && ao.actionDescription && (() => {
+                      const action = buildTrackedAction(item, ao, i);
+                      return (
+                        <ActionControls
+                          action={action}
+                          checked={action ? Boolean(actionState[action.key]) : false}
+                          onSetActionDone={onSetActionDone}
+                        />
+                      );
+                    })()}
                     {ao.expiresAt && (
                       <p className="text-muted-foreground mt-0.5">
                         {formatRelativeTime(ao.expiresAt)}
@@ -824,4 +883,210 @@ function CartItemRow({
       )}
     </div>
   );
+}
+
+type TrackedAction = {
+  key: string;
+  kind: "coupon" | "rebate" | "reward";
+  itemName: string;
+  title: string;
+  description: string;
+  value: number;
+  url: string;
+};
+
+function getTrackedActions(scenario: OptimizationScenario): TrackedAction[] {
+  return scenario.items.flatMap(item =>
+    item.appliedOpportunities
+      .map((ao, index) => buildTrackedAction(item, ao, index))
+      .filter((action): action is TrackedAction => Boolean(action))
+  );
+}
+
+function buildTrackedAction(
+  item: CartPlanItem,
+  appliedOpportunity: CartPlanItem["appliedOpportunities"][number],
+  index: number
+): TrackedAction | null {
+  const opportunity = appliedOpportunity.opportunity;
+  if (!appliedOpportunity.requiresAction || !opportunity) return null;
+
+  const kind: TrackedAction["kind"] = appliedOpportunity.isFutureValue || opportunity.requiresReceipt
+    ? "rebate"
+    : opportunity.requiresLoyaltyCard
+      ? "reward"
+      : "coupon";
+
+  return {
+    key: `${kind}:${opportunity.id}:${item.product?.id ?? item.normalized}:${index}`,
+    kind,
+    itemName: item.product?.name ?? item.raw,
+    title: opportunity.title,
+    description: appliedOpportunity.actionDescription ?? "Complete this action before checkout",
+    value: appliedOpportunity.savingsAmount,
+    url: getActionUrl(opportunity.providerId, kind),
+  };
+}
+
+function getActionUrl(providerId: string, kind: TrackedAction["kind"]) {
+  const providerUrls: Record<string, string> = {
+    "seed-ibotta": "https://ibotta.com/",
+    "live-ibotta-api": "https://ibotta.com/",
+    "seed-fetch": "https://www.fetch.com/",
+    "seed-kroger": "https://www.kroger.com/savings/cl/coupons/",
+    "live-kroger-api": "https://www.kroger.com/savings/cl/coupons/",
+    "seed-target": "https://www.target.com/circle/offers",
+    "seed-walmart": "https://www.walmart.com/",
+  };
+
+  if (providerUrls[providerId]) return providerUrls[providerId];
+  return kind === "rebate" ? "https://www.google.com/search?q=grocery+rebate+app" : "https://www.google.com/search?q=grocery+digital+coupons";
+}
+
+function ActionTracker({
+  actions,
+  actionState,
+  onSetActionDone,
+}: {
+  actions: TrackedAction[];
+  actionState: Record<string, boolean>;
+  onSetActionDone: (key: string, done: boolean) => void;
+}) {
+  const coupons = actions.filter(action => action.kind === "coupon" || action.kind === "reward");
+  const rebates = actions.filter(action => action.kind === "rebate");
+  const clipped = coupons.filter(action => actionState[action.key]).length;
+  const submitted = rebates.filter(action => actionState[action.key]).length;
+  const rebateValue = rebates
+    .filter(action => !actionState[action.key])
+    .reduce((sum, action) => sum + action.value, 0);
+
+  return (
+    <Card className="bg-primary/5 border-primary/20">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-1.5">
+          <Tag className="h-4 w-4 text-primary" />
+          Savings Checklist
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {coupons.length > 0 && `${clipped}/${coupons.length} coupons clipped`}
+          {coupons.length > 0 && rebates.length > 0 ? " · " : ""}
+          {rebates.length > 0 && `${rebates.length - submitted} rebates pending — submit receipts to claim ${formatCurrency(rebateValue)}`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-2">
+        {actions.map(action => (
+          <div key={action.key} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{action.itemName}</p>
+              <p className="text-xs text-muted-foreground">{action.description}</p>
+            </div>
+            <ActionControls
+              action={action}
+              checked={Boolean(actionState[action.key])}
+              onSetActionDone={onSetActionDone}
+            />
+          </div>
+        ))}
+        {coupons.length > 0 && clipped === coupons.length && (
+          <p className="flex items-center gap-1 text-xs text-emerald-700">
+            <CheckCircle2 className="h-3 w-3" />
+            All coupon actions marked clipped.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActionControls({
+  action,
+  checked,
+  onSetActionDone,
+}: {
+  action: TrackedAction | null;
+  checked: boolean;
+  onSetActionDone: (key: string, done: boolean) => void;
+}) {
+  if (!action) return null;
+  const doneLabel = action.kind === "rebate" ? "Submitted" : action.kind === "reward" ? "Loaded" : "Clipped";
+  const ctaLabel = action.kind === "rebate" ? "Submit Receipt" : "Clip Now";
+
+  return (
+    <div className="flex items-center gap-2">
+      <a
+        href={action.url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs font-medium hover:bg-muted"
+      >
+        {ctaLabel}
+        <ExternalLink className="h-3 w-3" />
+      </a>
+      <label className="inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs font-medium hover:bg-muted cursor-pointer">
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 accent-primary"
+          checked={checked}
+          onChange={event => onSetActionDone(action.key, event.target.checked)}
+        />
+        {doneLabel}
+      </label>
+    </div>
+  );
+}
+
+function ConfidenceBadge({
+  confidence,
+  source,
+  observedAt,
+  compact = false,
+}: {
+  confidence: number;
+  source?: string | null;
+  observedAt?: Date | string | null;
+  compact?: boolean;
+}) {
+  const level = inferConfidenceLevel(confidence);
+  const label = getConfidenceLabel(level);
+  const description = CONFIDENCE_DESCRIPTIONS[level] ?? "Confidence details unavailable";
+  const sourceText = source ? `Source: ${formatSource(source)}` : "Source details unavailable";
+  const observedText = observedAt ? `Updated ${formatRelativeTime(new Date(observedAt))}` : "Last verified date unavailable";
+  const title = `${label}: ${description}. ${sourceText}. ${observedText}.`;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded border font-medium",
+        compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs",
+        getConfidenceColor(confidence)
+      )}
+      title={title}
+      aria-label={title}
+    >
+      {level === "CART_VALIDATED" && <Shield className="h-3 w-3" />}
+      {compact ? `${Math.round(confidence * 100)}%` : `${label} · ${Math.round(confidence * 100)}%`}
+    </span>
+  );
+}
+
+function inferConfidenceLevel(confidence: number) {
+  if (confidence >= 0.97) return "CART_VALIDATED";
+  if (confidence >= 0.94) return "OFFICIAL_API";
+  if (confidence >= 0.92) return "CONNECTED_ACCOUNT";
+  if (confidence >= 0.89) return "RECEIPT_VALIDATED";
+  if (confidence >= 0.79) return "WEEKLY_AD";
+  if (confidence >= 0.74) return "SEED_DEMO";
+  if (confidence >= 0.69) return "PUBLIC_PAGE";
+  if (confidence >= 0.59) return "COMMUNITY_REPORT";
+  return "UNKNOWN";
+}
+
+function formatSource(source: string) {
+  return source
+    .replace(/^seed-/, "")
+    .replace(/^live-/, "")
+    .replace(/-api$/, "")
+    .split("-")
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

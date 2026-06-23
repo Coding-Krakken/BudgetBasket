@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { matchProducts, getEligibleOpportunities } from "./optimizer";
-import type { Opportunity, Product } from "@/types";
+import { matchProducts, getEligibleOpportunities, optimizeBasket } from "./optimizer";
+import type { Opportunity, Product, Store } from "@/types";
 
 const makeProduct = (overrides: Partial<Product> & { id: string; slug: string; name: string }): Product => ({
   normalizedName: overrides.name.toLowerCase(),
@@ -193,5 +193,81 @@ describe("getEligibilityTrace", () => {
     const trace = getEligibilityTrace(items, PRODUCTS, [eligible]);
     const entry = trace[0].opportunities.find(o => o.opportunityId === "good-opp");
     expect(entry?.excluded).toBe(false);
+  });
+});
+
+const makeStore = (overrides: Partial<Store> & { id: string; slug: string; name: string }): Store => ({
+  chain: overrides.name,
+  hasLoyaltyCard: false,
+  acceptsMfgCoupons: true,
+  hasDigitalCoupons: false,
+  hasWeeklyAd: true,
+  hasFuelRewards: false,
+  isActive: true,
+  ...overrides,
+});
+
+describe("unit-price normalization", () => {
+  it("normalizes count units and marks the best unit-price candidate", async () => {
+    const product = makeProduct({
+      id: "pods",
+      slug: "tide-pods",
+      name: "Tide Pods",
+      keywords: ["tide", "pods"],
+      unit: "ct",
+      unitQuantity: 32,
+    });
+    const stores = [
+      makeStore({ id: "store-a", slug: "store-a", name: "Store A" }),
+      makeStore({ id: "store-b", slug: "store-b", name: "Store B" }),
+    ];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "tide pods", normalized: "tide pods", quantity: 1 }],
+      products: [product],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "pods", storeId: "store-a", price: 8, confidence: 0.75 },
+        { productId: "pods", storeId: "store-b", price: 10, unitPrice: 0.20, unit: "ct", confidence: 0.75 },
+      ],
+      mode: "STOCK_UP",
+    });
+
+    expect(result.items[0].storeId).toBe("store-b");
+    expect(result.items[0].unitPrice?.unit).toBe("ct");
+    expect(result.items[0].unitPrice?.price).toBeCloseTo(0.20);
+    expect(result.items[0].isBestUnitPrice).toBe(true);
+  });
+
+  it("normalizes pounds to ounces for stock-up comparisons", async () => {
+    const product = makeProduct({
+      id: "beef",
+      slug: "ground-beef",
+      name: "Ground Beef",
+      keywords: ["ground", "beef"],
+      unit: "lb",
+      unitQuantity: 2,
+    });
+    const stores = [
+      makeStore({ id: "store-a", slug: "store-a", name: "Store A" }),
+      makeStore({ id: "store-b", slug: "store-b", name: "Store B" }),
+    ];
+
+    const result = await optimizeBasket({
+      parsedItems: [{ raw: "ground beef", normalized: "ground beef", quantity: 1 }],
+      products: [product],
+      stores,
+      opportunities: [],
+      priceObservations: [
+        { productId: "beef", storeId: "store-a", price: 9.60, confidence: 0.75 },
+        { productId: "beef", storeId: "store-b", price: 10.24, confidence: 0.75 },
+      ],
+      mode: "STOCK_UP",
+    });
+
+    expect(result.items[0].unitPrice?.unit).toBe("oz");
+    expect(result.items[0].unitPrice?.price).toBeCloseTo(0.30);
+    expect(result.items[0].storeId).toBe("store-a");
   });
 });

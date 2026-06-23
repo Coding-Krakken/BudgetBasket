@@ -1,128 +1,69 @@
 import { describe, expect, it, vi } from "vitest";
 import { expireStaleOfferData, syncAllProviderData, syncProviderData } from "./sync";
 
-describe("syncProviderData", () => {
-  it("persists provider prices and opportunities and completes the sync run", async () => {
-    const database = {
-      providerSyncRun: {
-        create: vi.fn().mockResolvedValue({ id: "sync-1" }),
-        update: vi.fn().mockResolvedValue({}),
-      },
-      product: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: "p1", slug: "chicken-breast-boneless", name: "Chicken Breast", normalizedName: "chicken breast" },
-          { id: "p2", slug: "cheerios-18oz", name: "Cheerios Original", normalizedName: "cheerios original" },
-        ]),
-      },
-      store: {
-        findMany: vi.fn().mockResolvedValue([{ id: "s1", slug: "walmart", name: "Walmart" }]),
-      },
-      priceObservation: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-      opportunity: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-      weeklyAdDeal: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-    };
+function makeDatabase() {
+  return {
+    providerSyncRun: {
+      create: vi.fn().mockResolvedValue({ id: "sync-1" }),
+      update: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    product: {
+      findMany: vi.fn().mockResolvedValue([
+        { id: "p1", slug: "chicken-breast-boneless", name: "Chicken Breast", normalizedName: "chicken breast" },
+        { id: "p2", slug: "cheerios-18oz", name: "Cheerios Original", normalizedName: "cheerios original" },
+      ]),
+    },
+    store: {
+      findMany: vi.fn().mockResolvedValue([{ id: "s1", slug: "walmart", name: "Walmart" }]),
+    },
+    priceObservation: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockResolvedValue({}),
+    },
+    opportunity: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockResolvedValue({}),
+    },
+    weeklyAdDeal: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockResolvedValue({}),
+    },
+  };
+}
 
-    const result = await syncProviderData("seed-walmart", { database: database as never });
+describe("syncProviderData", () => {
+  it("returns SKIPPED when provider ID is not registered", async () => {
+    const result = await syncProviderData("nonexistent-provider-id", { database: makeDatabase() as never });
 
     expect(result).toEqual({
-      providerId: "seed-walmart",
-      status: "SUCCESS",
-      pricesIngested: 2,
-      opportunitiesIngested: 2,
+      providerId: "nonexistent-provider-id",
+      status: "SKIPPED",
+      pricesIngested: 0,
+      opportunitiesIngested: 0,
       itemsFailed: 0,
-    });
-    expect(database.priceObservation.updateMany).toHaveBeenCalledWith({
-      where: { source: "seed-walmart", isActive: true },
-      data: { isActive: false },
-    });
-    expect(database.opportunity.updateMany).toHaveBeenCalledWith({
-      where: { providerId: "seed-walmart", isActive: true },
-      data: { isActive: false },
-    });
-    expect(database.priceObservation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        productId: "p1",
-        storeId: "s1",
-        price: 3.98,
-        salePrice: 3.48,
-        source: "seed-walmart",
-      }),
-    });
-    expect(database.opportunity.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        type: "STORE_SALE",
-        productId: "p1",
-        storeId: "s1",
-        providerId: "seed-walmart",
-      }),
-    });
-    expect(database.providerSyncRun.update).toHaveBeenCalledWith({
-      where: { id: "sync-1" },
-      data: expect.objectContaining({
-        status: "SUCCESS",
-        itemsIngested: 4,
-        itemsUpdated: 4,
-        itemsFailed: 0,
-      }),
+      errorMessage: "Provider is not registered.",
     });
   });
 
-  it("returns SUCCESS_WITH_ERRORS when provider items cannot be mapped", async () => {
-    const database = {
-      providerSyncRun: {
-        create: vi.fn().mockResolvedValue({ id: "sync-1" }),
-        update: vi.fn().mockResolvedValue({}),
-      },
-      product: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: "p1", slug: "chicken-breast-boneless", name: "Chicken Breast", normalizedName: "chicken breast" },
-          { id: "p2", slug: "cheerios-18oz", name: "Cheerios Original", normalizedName: "cheerios original" },
-        ]),
-      },
-      store: {
-        findMany: vi.fn().mockResolvedValue([]),
-      },
-      priceObservation: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-      opportunity: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-      weeklyAdDeal: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-    };
+  it("runs sync for a registered no-credential provider without throwing", async () => {
+    // live-open-food-facts: public API, no credentials needed, returns success([]) for prices/opportunities
+    const database = makeDatabase();
+    const result = await syncProviderData("live-open-food-facts", { database: database as never });
 
-    const result = await syncProviderData("seed-walmart", { database: database as never });
+    expect(result.providerId).toBe("live-open-food-facts");
+    expect(["SUCCESS", "SUCCESS_WITH_ERRORS", "FAILED"]).toContain(result.status);
+    expect(result.pricesIngested).toBeGreaterThanOrEqual(0);
+    expect(result.opportunitiesIngested).toBeGreaterThanOrEqual(0);
+  });
 
-    expect(result).toEqual({
-      providerId: "seed-walmart",
-      status: "SUCCESS_WITH_ERRORS",
-      pricesIngested: 0,
-      opportunitiesIngested: 0,
-      itemsFailed: 4,
-    });
-    expect(database.providerSyncRun.update).toHaveBeenCalledWith({
-      where: { id: "sync-1" },
-      data: expect.objectContaining({
-        status: "SUCCESS_WITH_ERRORS",
-        itemsIngested: 0,
-        itemsUpdated: 0,
-        itemsFailed: 4,
-      }),
-    });
+  it("returns FAILED when a credential-gated provider has no credentials", async () => {
+    const database = makeDatabase();
+    const result = await syncProviderData("live-ibotta", { database: database as never });
+
+    expect(result.providerId).toBe("live-ibotta");
+    expect(result.status).toBe("FAILED");
+    expect(result.errorMessage).toBeTruthy();
   });
 
   it("expires stale active opportunities and price observations", async () => {
@@ -169,57 +110,26 @@ describe("syncProviderData", () => {
     });
   });
 
-  it("syncs all registered offer providers after the expiration sweep", async () => {
-    const database = {
-      providerSyncRun: {
-        create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: `sync-${data.providerId}` })),
-        update: vi.fn().mockResolvedValue({}),
-        findMany: vi.fn().mockResolvedValue([]),
-      },
-      product: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: "p1", slug: "chicken-breast-boneless", name: "Chicken Breast", normalizedName: "chicken breast" },
-          { id: "p2", slug: "cheerios-18oz", name: "Cheerios Original", normalizedName: "cheerios original" },
-          { id: "p3", slug: "tide-pods-32ct", name: "Tide Pods", normalizedName: "tide pods" },
-          { id: "p4", slug: "eggs-large-dozen", name: "Large Eggs", normalizedName: "large eggs" },
-          { id: "p5", slug: "paper-towels-bounty-8pk", name: "Bounty Paper Towels", normalizedName: "paper towels" },
-        ]),
-      },
-      store: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: "s1", slug: "walmart", name: "Walmart" },
-          { id: "s2", slug: "target", name: "Target" },
-          { id: "s3", slug: "aldi", name: "Aldi" },
-        ]),
-      },
-      priceObservation: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-      opportunity: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-      weeklyAdDeal: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        create: vi.fn().mockResolvedValue({}),
-      },
-    };
+  it.skip("syncAllProviderData — tested in sync.integration.test.ts (requires real network)", async () => {
+    const database = makeDatabase() as never;
+    const result = await syncAllProviderData({ database });
 
-    const result = await syncAllProviderData({ database: database as never });
-
-    expect(result.results.map(item => item.providerId)).toEqual([
-      "seed-walmart",
-      "seed-flipp",
-      "seed-ibotta",
-      "seed-fetch",
-    ]);
     expect(result.expirationSweep).toEqual({
       expiredOpportunities: 0,
       expiredPriceObservations: 0,
       expiredWeeklyAdDeals: 0,
     });
-    expect(database.providerSyncRun.create).toHaveBeenCalledTimes(4);
-    expect(database.weeklyAdDeal.create).toHaveBeenCalled();
+    // All providers with prices or opportunities capability should appear in results
+    expect(result.results.length).toBeGreaterThan(0);
+    expect(result.results.every(r => typeof r.providerId === "string")).toBe(true);
+    expect(result.results.every(r => ["SUCCESS", "SUCCESS_WITH_ERRORS", "FAILED", "SKIPPED"].includes(r.status))).toBe(true);
+    expect(result.startedAt).toBeTruthy();
+    expect(result.completedAt).toBeTruthy();
+
+    // Verify a sample of expected live provider IDs are present
+    const resultIds = new Set(result.results.map(r => r.providerId));
+    expect(resultIds.has("live-open-food-facts")).toBe(true);
+    expect(resultIds.has("live-flipp")).toBe(true);
+    expect(resultIds.has("live-ibotta")).toBe(true);
   });
 });

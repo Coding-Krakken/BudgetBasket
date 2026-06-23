@@ -7,12 +7,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { SeedWalmartProvider } from "./seed-walmart";
 import type { BaseProvider, ProviderOpportunityData, ProviderPriceData } from "./base";
 import { EnvCredentialStore } from "./credential-store";
 import { LiveKrogerProvider } from "./live-kroger";
-import { ManualWeeklyAdProvider } from "./manual-weekly-ads";
-import { SeedFetchRewardsProvider, SeedIbottaProvider } from "./seed-rebate-provider";
+import { LiveFlippProvider } from "./live-flipp";
+import { LiveSlickdealsProvider } from "./live-slickdeals";
+import { LiveIbottaProvider } from "./live-ibotta";
+import { LiveFetchRewardsProvider } from "./live-fetch-rewards";
+import { LiveWalmartDealsProvider } from "./live-walmart-deals";
 
 const MOCK_PRODUCTS = [
   { id: "p1", slug: "whole-milk-gallon", name: "Whole Milk 1 Gallon", normalizedName: "whole milk 1 gallon" },
@@ -27,10 +29,11 @@ const MOCK_STORES = [
 
 // All concrete providers to contract-test
 const PROVIDERS: BaseProvider[] = [
-  new SeedWalmartProvider(),
-  new ManualWeeklyAdProvider(),
-  new SeedIbottaProvider(),
-  new SeedFetchRewardsProvider(),
+  new LiveWalmartDealsProvider(),
+  new LiveFlippProvider(),
+  new LiveSlickdealsProvider(),
+  new LiveIbottaProvider(),
+  new LiveFetchRewardsProvider(),
   new LiveKrogerProvider(new EnvCredentialStore({}), (() => {
     throw new Error("fetch should not be called without credentials");
   }) as unknown as typeof fetch),
@@ -97,7 +100,7 @@ for (const provider of PROVIDERS) {
       });
 
       it("has a valid type", () => {
-        const validTypes = ["RETAILER", "COUPON_NETWORK", "REBATE_APP", "WEEKLY_AD", "COMMUNITY"];
+        const validTypes = ["RETAILER", "COUPON_NETWORK", "REBATE_APP", "CASHBACK_APP", "WEEKLY_AD", "RECEIPT_PROCESSOR", "COMMUNITY"];
         expect(validTypes).toContain(provider.type);
       });
 

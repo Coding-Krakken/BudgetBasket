@@ -223,7 +223,7 @@ export function PlannerClient({ stores }: PlannerClientProps) {
       return;
     }
     if (!isZipKnown(zip)) {
-      setZipError("Zip not in demo dataset — try 43215 (Columbus, OH)");
+      setZipError("No stores found for this zip code — try a nearby zip");
       return;
     }
     const updated = { ...prefs, zipCode: zip };
@@ -1024,13 +1024,26 @@ function buildTrackedAction(
 
 function getActionUrl(providerId: string, kind: TrackedAction["kind"]) {
   const providerUrls: Record<string, string> = {
-    "seed-ibotta": "https://ibotta.com/",
+    "live-ibotta": "https://ibotta.com/",
     "live-ibotta-api": "https://ibotta.com/",
-    "seed-fetch": "https://www.fetch.com/",
-    "seed-kroger": "https://www.kroger.com/savings/cl/coupons/",
+    "live-ibotta-performance": "https://home.ibotta.com/performance-network",
+    "live-fetch-rewards": "https://www.fetch.com/",
+    "live-checkout51": "https://checkout51.com/",
+    "live-rakuten-cashback": "https://www.rakuten.com/",
+    "live-upside": "https://upside.com/",
     "live-kroger-api": "https://www.kroger.com/savings/cl/coupons/",
-    "seed-target": "https://www.target.com/circle/offers",
-    "seed-walmart": "https://www.walmart.com/",
+    "live-kroger-digital": "https://www.kroger.com/savings/cl/coupons/",
+    "live-target-api": "https://www.target.com/circle/offers",
+    "live-target-circle": "https://www.target.com/circle/offers",
+    "live-walmart-api": "https://www.walmart.com/",
+    "live-walmart-deals": "https://www.walmart.com/shop/deals",
+    "live-cvs-extracare": "https://www.cvs.com/extracare/benefits",
+    "live-walgreens-api": "https://www.walgreens.com/offers/offers.jsp",
+    "live-walgreens-loyalty": "https://www.walgreens.com/offers/offers.jsp",
+    "live-safeway-loyalty": "https://www.safeway.com/justfor-u.html",
+    "live-meijer-mperks": "https://www.meijer.com/mperks.html",
+    "live-coupons-com": "https://www.coupons.com/",
+    "live-flipp": "https://flipp.com/flyers",
   };
 
   if (providerUrls[providerId]) return providerUrls[providerId];
@@ -1229,7 +1242,6 @@ function inferConfidenceLevel(confidence: number) {
   if (confidence >= 0.92) return "CONNECTED_ACCOUNT";
   if (confidence >= 0.89) return "RECEIPT_VALIDATED";
   if (confidence >= 0.79) return "WEEKLY_AD";
-  if (confidence >= 0.74) return "SEED_DEMO";
   if (confidence >= 0.69) return "PUBLIC_PAGE";
   if (confidence >= 0.59) return "COMMUNITY_REPORT";
   return "UNKNOWN";

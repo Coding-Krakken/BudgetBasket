@@ -97,7 +97,7 @@ export default function ProfilePage() {
       return;
     }
     if (prefs.zipCode && !isZipKnown(prefs.zipCode)) {
-      setZipError("Zip not in demo dataset — try 43215 (Columbus, OH)");
+      setZipError("No stores found for this zip code — try a nearby zip");
       return;
     }
     setZipError("");

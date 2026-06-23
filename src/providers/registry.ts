@@ -1,265 +1,195 @@
-import type { ProviderHealth } from "@/types";
-import { BaseProvider } from "./base";
-import { credentialStore } from "./credential-store";
-import { LiveKrogerProvider } from "./live-kroger";
-import { ManualWeeklyAdProvider } from "./manual-weekly-ads";
-import { SeedFetchRewardsProvider, SeedIbottaProvider } from "./seed-rebate-provider";
-import { SeedWalmartProvider } from "./seed-walmart";
-import db from "@/lib/db";
+import type { ProviderHealth } from "@/types"
+import { BaseProvider } from "./base"
+import db from "@/lib/db"
 
-// Registry of all active providers
-const providerRegistry: Record<string, BaseProvider> = {};
+// ── Public / open-data providers ─────────────────────────────────────────────
+import { LiveOpenFoodFactsProvider } from "./live-open-food-facts"
+import { LiveUsdaProvider } from "./live-usda"
+import { LiveFlippProvider } from "./live-flipp"
+import { LiveWalmartDealsProvider } from "./live-walmart-deals"
+import { LiveTargetDealsProvider } from "./live-target-deals"
+import { LiveCostcoProvider } from "./live-costco"
+import { LiveAldiProvider } from "./live-aldi"
+import { LiveDollarGeneralProvider } from "./live-dollar-general"
+import { LiveSamsClubProvider } from "./live-sams-club"
+import { LiveFlashfoodProvider } from "./live-flashfood"
+import { LiveLozoProvider } from "./live-lozo"
 
-function registerProvider(provider: BaseProvider) {
-  providerRegistry[provider.id] = provider;
+// ── Deal blog / community RSS providers ──────────────────────────────────────
+import { LiveSlickdealsProvider } from "./live-slickdeals"
+import { LiveHip2SaveProvider } from "./live-hip2save"
+import { LiveKclProvider } from "./live-kcl"
+import { LiveSouthernSaversProvider } from "./live-southern-savers"
+import { LiveRedditDealsProvider } from "./live-reddit-deals"
+
+// ── Credential-gated: Retailer official APIs ─────────────────────────────────
+import { LiveKrogerProvider } from "./live-kroger"
+import { LiveWalgreensApiProvider } from "./live-walgreens-api"
+import { LiveWalmartApiProvider } from "./live-walmart-api"
+import { LiveTargetApiProvider } from "./live-target-api"
+import { LiveInstacartProvider } from "./live-instacart"
+import { LiveGoodRxProvider } from "./live-goodrx"
+
+// ── Credential-gated: Rebate / cashback apps ─────────────────────────────────
+import { LiveIbottaProvider } from "./live-ibotta"
+import { LiveIbottaPerformanceProvider } from "./live-ibotta-performance"
+import { LiveFetchRewardsProvider } from "./live-fetch-rewards"
+import { LiveCheckout51Provider } from "./live-checkout51"
+import { LiveShopmiumProvider } from "./live-shopmium"
+import { LiveRakutenCashbackProvider } from "./live-rakuten-cashback"
+import { LiveUpsideProvider } from "./live-upside"
+import { LiveTooGoodToGoProvider } from "./live-too-good-to-go"
+
+// ── Credential-gated: Coupon / affiliate networks ────────────────────────────
+import { LiveCouponsDotComProvider } from "./live-coupons-com"
+import { LiveRetailMeNotProvider } from "./live-retailmenot"
+import { LiveCJAffiliateProvider } from "./live-cj-affiliate"
+import { LiveRakutenAdvertisingProvider } from "./live-rakuten-advertising"
+import { LiveImpactProvider } from "./live-impact"
+import { LiveAwinProvider } from "./live-awin"
+import { LiveShareASaleProvider } from "./live-shareasale"
+import { LiveFlexOffersProvider } from "./live-flexoffers"
+
+// ── Credential-gated: Manufacturer coupon portals ────────────────────────────
+import { LivePGProvider } from "./live-pg"
+import { LiveGeneralMillsProvider } from "./live-general-mills"
+import { LiveKellanovaProvider } from "./live-kellanova"
+
+// ── Credential-gated: Enterprise coupon infrastructure ───────────────────────
+import { LiveInmarProvider } from "./live-inmar"
+import { LiveCatalinaProvider } from "./live-catalina"
+import { LiveQuotientProvider } from "./live-quotient"
+import { LiveCouponBureauProvider } from "./live-coupon-bureau"
+import { LiveNCRProvider } from "./live-ncr"
+import { LiveValassisProvider } from "./live-valassis"
+
+// ── User OAuth loyalty account providers ─────────────────────────────────────
+import { LiveKrogerDigitalProvider } from "./live-kroger-digital"
+import { LiveTargetCircleProvider } from "./live-target-circle"
+import { LiveCvsExtraCareProvider } from "./live-cvs-extracare"
+import { LiveWalgreensLoyaltyProvider } from "./live-walgreens-loyalty"
+import { LiveSafewayLoyaltyProvider } from "./live-safeway-loyalty"
+import { LiveMeijerMperksProvider } from "./live-meijer-mperks"
+import { LiveAmazonPrimeProvider } from "./live-amazon-prime"
+
+const ALL_PROVIDERS: BaseProvider[] = [
+  // Public / open-data (no credentials needed)
+  new LiveOpenFoodFactsProvider(),
+  new LiveUsdaProvider(),
+  new LiveFlippProvider(),
+  new LiveWalmartDealsProvider(),
+  new LiveTargetDealsProvider(),
+  new LiveCostcoProvider(),
+  new LiveAldiProvider(),
+  new LiveDollarGeneralProvider(),
+  new LiveSamsClubProvider(),
+  new LiveFlashfoodProvider(),
+  new LiveLozoProvider(),
+
+  // Deal blog / community RSS (no credentials needed)
+  new LiveSlickdealsProvider(),
+  new LiveHip2SaveProvider(),
+  new LiveKclProvider(),
+  new LiveSouthernSaversProvider(),
+  new LiveRedditDealsProvider(),
+
+  // Credential-gated: Retailer official APIs
+  new LiveKrogerProvider(),
+  new LiveWalgreensApiProvider(),
+  new LiveWalmartApiProvider(),
+  new LiveTargetApiProvider(),
+  new LiveInstacartProvider(),
+  new LiveGoodRxProvider(),
+
+  // Credential-gated: Rebate / cashback apps
+  new LiveIbottaProvider(),
+  new LiveIbottaPerformanceProvider(),
+  new LiveFetchRewardsProvider(),
+  new LiveCheckout51Provider(),
+  new LiveShopmiumProvider(),
+  new LiveRakutenCashbackProvider(),
+  new LiveUpsideProvider(),
+  new LiveTooGoodToGoProvider(),
+
+  // Credential-gated: Coupon / affiliate networks
+  new LiveCouponsDotComProvider(),
+  new LiveRetailMeNotProvider(),
+  new LiveCJAffiliateProvider(),
+  new LiveRakutenAdvertisingProvider(),
+  new LiveImpactProvider(),
+  new LiveAwinProvider(),
+  new LiveShareASaleProvider(),
+  new LiveFlexOffersProvider(),
+
+  // Credential-gated: Manufacturer coupon portals
+  new LivePGProvider(),
+  new LiveGeneralMillsProvider(),
+  new LiveKellanovaProvider(),
+
+  // Credential-gated: Enterprise coupon infrastructure
+  new LiveInmarProvider(),
+  new LiveCatalinaProvider(),
+  new LiveQuotientProvider(),
+  new LiveCouponBureauProvider(),
+  new LiveNCRProvider(),
+  new LiveValassisProvider(),
+
+  // User OAuth loyalty account providers
+  new LiveKrogerDigitalProvider(),
+  new LiveTargetCircleProvider(),
+  new LiveCvsExtraCareProvider(),
+  new LiveWalgreensLoyaltyProvider(),
+  new LiveSafewayLoyaltyProvider(),
+  new LiveMeijerMperksProvider(),
+  new LiveAmazonPrimeProvider(),
+]
+
+const providerRegistry: Record<string, BaseProvider> = {}
+for (const provider of ALL_PROVIDERS) {
+  providerRegistry[provider.id] = provider
 }
-
-// Register all seed/demo providers
-registerProvider(new SeedWalmartProvider());
-registerProvider(new ManualWeeklyAdProvider());
-registerProvider(new SeedIbottaProvider());
-registerProvider(new SeedFetchRewardsProvider());
-
-const liveKrogerProvider = new LiveKrogerProvider(credentialStore);
-if (liveKrogerProvider.hasRequiredCredentials()) {
-  registerProvider(liveKrogerProvider);
-}
-
-// Future: registerProvider(new RealTargetProvider());
-// Future: registerProvider(new RealIbottaProvider());
 
 export function getProvider(id: string): BaseProvider | undefined {
-  return providerRegistry[id];
+  return providerRegistry[id]
 }
 
 export function getAllProviders(): BaseProvider[] {
-  return Object.values(providerRegistry);
+  return Object.values(providerRegistry)
 }
 
-// Synchronous baseline — used when DB is unavailable
 export function getProviderHealthSummary(): ProviderHealth[] {
-  const knownProviders: ProviderHealth[] = [
-    {
-      providerId: "seed-walmart",
-      providerName: "Walmart (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 15,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-      syncCapable: true,
-    },
-    {
-      providerId: "seed-target",
-      providerName: "Target (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 10,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-kroger",
-      providerName: "Kroger (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 14,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-aldi",
-      providerName: "Aldi (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 8,
-      capabilities: { prices: true, opportunities: false, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-wegmans",
-      providerName: "Wegmans (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 6,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-cvs",
-      providerName: "CVS Pharmacy (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 6,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-walgreens",
-      providerName: "Walgreens (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 5,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-costco",
-      providerName: "Costco (Demo Data)",
-      type: "RETAILER",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 4,
-      capabilities: { prices: true, opportunities: false, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-ibotta",
-      providerName: "Ibotta (Demo Data)",
-      type: "REBATE_APP",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 18,
-      capabilities: { prices: false, opportunities: true, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: true },
-      isDemo: true,
-      syncCapable: true,
-    },
-    {
-      providerId: "seed-fetch",
-      providerName: "Fetch Rewards (Demo Data)",
-      type: "REBATE_APP",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 6,
-      capabilities: { prices: false, opportunities: true, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: true },
-      isDemo: true,
-      syncCapable: true,
-    },
-    {
-      providerId: "seed-coupons",
-      providerName: "Coupons.com (Demo Data)",
-      type: "COUPON_NETWORK",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 12,
-      capabilities: { prices: false, opportunities: true, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-    },
-    {
-      providerId: "seed-flipp",
-      providerName: "Flipp Weekly Ads (Demo Data)",
-      type: "WEEKLY_AD",
-      status: "DEMO",
-      lastSyncAt: new Date(),
-      lastSuccessAt: new Date(),
-      freshnessMinutes: 0,
-      itemCount: 8,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: true,
-      syncCapable: true,
-    },
-    // Future providers (not yet integrated)
-    {
-      providerId: "live-kroger-api",
-      providerName: "Kroger API (Official)",
-      type: "RETAILER",
-      status: liveKrogerProvider.hasRequiredCredentials() ? "PENDING" : "OFFLINE",
-      lastSyncAt: null,
-      lastSuccessAt: null,
-      freshnessMinutes: null,
-      itemCount: 0,
-      capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: true, cartIntegration: true, receiptValidation: false },
-      isDemo: false,
-    },
-    {
-      providerId: "live-walmart-api",
-      providerName: "Walmart Affiliate API (Official)",
-      type: "RETAILER",
-      status: "PENDING",
-      lastSyncAt: null,
-      lastSuccessAt: null,
-      freshnessMinutes: null,
-      itemCount: 0,
-      capabilities: { prices: true, opportunities: false, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: false },
-      isDemo: false,
-    },
-    {
-      providerId: "live-ibotta-api",
-      providerName: "Ibotta Publisher API",
-      type: "REBATE_APP",
-      status: "PENDING",
-      lastSyncAt: null,
-      lastSuccessAt: null,
-      freshnessMinutes: null,
-      itemCount: 0,
-      capabilities: { prices: false, opportunities: true, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: true },
-      isDemo: false,
-    },
-  ];
-
-  return knownProviders;
+  return getAllProviders().map(p => p.getHealth())
 }
 
-// Async version enriched with real DB counts from ProviderSyncRun records
 export async function getProviderHealthSummaryFromDb(): Promise<ProviderHealth[]> {
-  const base = getProviderHealthSummary();
+  const base = getProviderHealthSummary()
 
   try {
     const [syncRuns, oppCounts] = await Promise.all([
-      db.providerSyncRun.findMany({ orderBy: { startedAt: "desc" }, take: 100 }),
+      db.providerSyncRun.findMany({ orderBy: { startedAt: "desc" }, take: 200 }),
       db.opportunity.groupBy({ by: ["providerId"], _count: { id: true }, where: { isActive: true } }),
-    ]);
+    ])
 
-    const latestByProvider = new Map<string, typeof syncRuns[0]>();
+    const latestByProvider = new Map<string, typeof syncRuns[0]>()
     for (const run of syncRuns) {
-      if (!latestByProvider.has(run.providerId)) latestByProvider.set(run.providerId, run);
+      if (!latestByProvider.has(run.providerId)) latestByProvider.set(run.providerId, run)
     }
 
-    const countByProvider = new Map<string, number>();
+    const countByProvider = new Map<string, number>()
     for (const row of oppCounts) {
-      countByProvider.set(row.providerId, row._count.id);
+      countByProvider.set(row.providerId, row._count.id)
     }
 
     return base.map(p => {
-      const lastRun = latestByProvider.get(p.providerId);
-      const dbCount = countByProvider.get(p.providerId);
+      const lastRun = latestByProvider.get(p.providerId)
+      const dbCount = countByProvider.get(p.providerId)
       return {
         ...p,
         ...(lastRun ? { lastSyncAt: lastRun.completedAt ?? lastRun.startedAt } : {}),
         ...(dbCount !== undefined ? { itemCount: dbCount } : {}),
-      };
-    });
+      }
+    })
   } catch {
-    // DB unavailable — return static baseline
-    return base;
+    return base
   }
 }

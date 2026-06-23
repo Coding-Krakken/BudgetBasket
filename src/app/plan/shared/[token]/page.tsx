@@ -74,7 +74,7 @@ export default async function SharedPlanPage({
     plan.overallConfidence >= 0.85
       ? "OFFICIAL_API"
       : plan.overallConfidence >= 0.75
-      ? "SEED_DEMO"
+      ? "PUBLIC_PAGE"
       : "UNKNOWN"
   );
 

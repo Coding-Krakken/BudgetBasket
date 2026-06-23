@@ -1,5 +1,7 @@
 import type { ProviderHealth } from "@/types";
 import { BaseProvider } from "./base";
+import { credentialStore } from "./credential-store";
+import { LiveKrogerProvider } from "./live-kroger";
 import { SeedWalmartProvider } from "./seed-walmart";
 import db from "@/lib/db";
 
@@ -13,7 +15,11 @@ function registerProvider(provider: BaseProvider) {
 // Register all seed/demo providers
 registerProvider(new SeedWalmartProvider());
 
-// Future: registerProvider(new RealKrogerProvider());
+const liveKrogerProvider = new LiveKrogerProvider(credentialStore);
+if (liveKrogerProvider.hasRequiredCredentials()) {
+  registerProvider(liveKrogerProvider);
+}
+
 // Future: registerProvider(new RealTargetProvider());
 // Future: registerProvider(new RealIbottaProvider());
 
@@ -177,7 +183,7 @@ export function getProviderHealthSummary(): ProviderHealth[] {
       providerId: "live-kroger-api",
       providerName: "Kroger API (Official)",
       type: "RETAILER",
-      status: "PENDING",
+      status: liveKrogerProvider.hasRequiredCredentials() ? "PENDING" : "OFFLINE",
       lastSyncAt: null,
       lastSuccessAt: null,
       freshnessMinutes: null,

@@ -6,6 +6,8 @@ import { Tag, Receipt, Star, Zap, TrendingDown, Clock, AlertCircle } from "lucid
 import db from "@/lib/db";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Discover Deals",
   description: "Browse active coupons, rebates, sales, and cashback offers.",

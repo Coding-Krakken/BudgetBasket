@@ -281,6 +281,7 @@ export interface ProviderHealth {
   errorMessage?: string | null;
   capabilities: ProviderCapability;
   isDemo: boolean;
+  syncCapable?: boolean;
 }
 
 export interface ProviderFetchResult<T> {

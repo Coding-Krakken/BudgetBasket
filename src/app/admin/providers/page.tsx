@@ -6,6 +6,8 @@ import { Settings, CheckCircle2, Clock, AlertCircle, Database, Activity } from "
 import db from "@/lib/db";
 import { getProviderHealthSummary } from "@/providers/registry";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Provider Diagnostics",
   description: "Admin view of data providers, sync status, and opportunity health.",
@@ -113,9 +115,14 @@ export default async function AdminProvidersPage() {
                       <p className="text-xs text-muted-foreground">{p.type} · {p.itemCount} items</p>
                     </div>
                   </div>
-                  <Badge variant={p.status === "DEMO" ? "demo" : p.status === "PENDING" ? "outline" : "verified"} className="text-[10px] shrink-0">
-                    {p.status}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {p.syncCapable && (
+                      <Badge variant="verified" className="text-[10px]">Sync</Badge>
+                    )}
+                    <Badge variant={p.status === "DEMO" ? "demo" : p.status === "PENDING" ? "outline" : "verified"} className="text-[10px]">
+                      {p.status}
+                    </Badge>
+                  </div>
                 </div>
               ))}
             </div>

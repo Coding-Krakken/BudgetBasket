@@ -64,6 +64,8 @@ export default async function PlanDetailPage({
     STOCK_UP: "Stock Up",
   };
 
+  const inputItemCount = plan.rawInput.split(/[,\n]/).map(s => s.trim()).filter(Boolean).length;
+
   const confidenceLabel = getConfidenceLabel(
     plan.overallConfidence >= 0.85
       ? "OFFICIAL_API"
@@ -91,7 +93,7 @@ export default async function PlanDetailPage({
             <p className="text-muted-foreground mt-1 text-sm">
               Optimized with <span className="font-medium">{MODE_LABELS[plan.optimizationMode] ?? plan.optimizationMode}</span> mode
               &nbsp;·&nbsp;
-              {plan.itemCount} item{plan.itemCount !== 1 ? "s" : ""}
+              {inputItemCount} item{inputItemCount !== 1 ? "s" : ""}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
@@ -170,7 +172,11 @@ export default async function PlanDetailPage({
       {/* Items */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Shopping List ({plan.items.length} items)</CardTitle>
+          <CardTitle className="text-base">
+            Shopping List ({inputItemCount} item{inputItemCount !== 1 ? "s" : ""}
+            {plan.items.length > inputItemCount && <span className="text-muted-foreground font-normal text-xs"> · {plan.items.length - inputItemCount} alternatives</span>}
+            )
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y">

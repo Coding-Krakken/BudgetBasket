@@ -50,6 +50,7 @@ export function getProviderHealthSummary(): ProviderHealth[] {
       itemCount: 15,
       capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
       isDemo: true,
+      syncCapable: true,
     },
     {
       providerId: "seed-target",
@@ -146,6 +147,7 @@ export function getProviderHealthSummary(): ProviderHealth[] {
       itemCount: 18,
       capabilities: { prices: false, opportunities: true, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: true },
       isDemo: true,
+      syncCapable: true,
     },
     {
       providerId: "seed-fetch",
@@ -158,6 +160,7 @@ export function getProviderHealthSummary(): ProviderHealth[] {
       itemCount: 6,
       capabilities: { prices: false, opportunities: true, weeklyAds: false, inventory: false, cartIntegration: false, receiptValidation: true },
       isDemo: true,
+      syncCapable: true,
     },
     {
       providerId: "seed-coupons",
@@ -182,6 +185,7 @@ export function getProviderHealthSummary(): ProviderHealth[] {
       itemCount: 8,
       capabilities: { prices: true, opportunities: true, weeklyAds: true, inventory: false, cartIntegration: false, receiptValidation: false },
       isDemo: true,
+      syncCapable: true,
     },
     // Future providers (not yet integrated)
     {

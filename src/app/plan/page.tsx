@@ -2,6 +2,8 @@ import { Metadata } from "next";
 import { PlannerClient } from "./planner-client";
 import db from "@/lib/db";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Shopping Planner",
   description: "Optimize your grocery list for maximum savings.",

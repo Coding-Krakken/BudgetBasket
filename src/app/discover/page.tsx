@@ -18,31 +18,35 @@ const LIVE_FILTER = { NOT: { providerId: { startsWith: "seed-" } } };
 async function getDeals() {
   try {
     const [featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds] = await Promise.all([
+      // Featured: highest-confidence deals with meaningful value
       db.opportunity.findMany({
-        where: { isActive: true, isFeatured: true, ...LIVE_FILTER, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
+        where: { isActive: true, ...LIVE_FILTER, confidence: { gte: 0.65 }, valueAmount: { gt: 0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
         take: 8,
-        orderBy: { confidence: "desc" },
+        orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
+      // Expiring Soon: anything expiring within 10 days (RSS deals last 7 days)
       db.opportunity.findMany({
         where: {
           isActive: true,
           ...LIVE_FILTER,
           expiresAt: {
             gte: new Date(),
-            lte: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+            lte: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
           },
         },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
-        take: 6,
+        take: 8,
         orderBy: { expiresAt: "asc" },
       }),
+      // High Value: any deal with $2+ off
       db.opportunity.findMany({
         where: { isActive: true, ...LIVE_FILTER, valueAmount: { gte: 2.0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
-        take: 6,
+        take: 8,
         orderBy: { valueAmount: "desc" },
       }),
+      // Rebates & Cash Back
       db.opportunity.findMany({
         where: {
           isActive: true,
@@ -54,17 +58,19 @@ async function getDeals() {
         take: 8,
         orderBy: [{ valueAmount: "desc" }, { confidence: "desc" }],
       }),
+      // Coupons: manufacturer + digital (RSS providers emit DIGITAL_COUPON)
       db.opportunity.findMany({
         where: {
           isActive: true,
           ...LIVE_FILTER,
-          type: "MANUFACTURER_COUPON",
+          type: { in: ["MANUFACTURER_COUPON", "DIGITAL_COUPON"] },
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
-        take: 6,
-        orderBy: { valueAmount: "desc" },
+        take: 8,
+        orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
+      // Weekly Ad / Store Sales
       db.opportunity.findMany({
         where: {
           isActive: true,
@@ -73,7 +79,7 @@ async function getDeals() {
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
-        take: 8,
+        take: 12,
         orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
     ]);
@@ -86,6 +92,7 @@ async function getDeals() {
 type Opportunity = Awaited<ReturnType<typeof getDeals>>["featured"][0];
 
 function formatSavings(opp: Opportunity): string {
+  if (opp.valueAmount === 0) return "View Deal";
   switch (opp.valueType) {
     case "PERCENT_OFF": return `${Math.round((opp.valuePercent ?? opp.valueAmount) * 100)}% Off`;
     case "CASH_BACK": return `$${opp.valueAmount.toFixed(2)} Cash Back`;
@@ -195,7 +202,7 @@ export default async function DiscoverPage() {
         <Separator />
         <Section title="Rebates & Cash Back" icon={Receipt} deals={rebates} emptyMsg="No rebates available." />
         <Separator />
-        <Section title="Manufacturer Coupons" icon={Tag} deals={mfgCoupons} emptyMsg="No manufacturer coupons available." />
+        <Section title="Coupons" icon={Tag} deals={mfgCoupons} emptyMsg="No coupons available right now." />
         <Separator />
         <Section title="Weekly Ad Deals" icon={Star} deals={weeklyAds} emptyMsg="No weekly ad deals found." />
       </div>

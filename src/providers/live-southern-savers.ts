@@ -51,6 +51,7 @@ export class LiveSouthernSaversProvider extends BaseProvider {
   readonly name = "Southern Savers";
   readonly type = "COUPON_NETWORK" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: false,
     opportunities: true,

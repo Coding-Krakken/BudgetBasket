@@ -32,6 +32,7 @@ export class LiveUsdaProvider extends BaseProvider {
   readonly name = "USDA FoodData Central";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: false,
     opportunities: false,

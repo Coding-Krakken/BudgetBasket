@@ -62,6 +62,7 @@ export abstract class BaseProvider {
   abstract readonly type: ProviderType;
   abstract readonly capabilities: ProviderCapability;
   abstract readonly isDemo: boolean;
+  readonly requiresCredentials: boolean = true;
 
   abstract fetchPrices(
     products: Pick<Product, "id" | "slug" | "name" | "normalizedName">[],
@@ -99,13 +100,14 @@ export abstract class BaseProvider {
       providerId: this.id,
       providerName: this.name,
       type: this.type,
-      status: "DEMO" as ProviderStatus,
+      status: this.requiresCredentials ? "OFFLINE" : "PENDING",
       lastSyncAt: new Date(),
       lastSuccessAt: new Date(),
       freshnessMinutes: 0,
       itemCount: 0,
       capabilities: this.capabilities,
       isDemo: this.isDemo,
+      syncCapable: !this.requiresCredentials,
     };
   }
 

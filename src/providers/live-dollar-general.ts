@@ -95,6 +95,7 @@ export class LiveDollarGeneralProvider extends BaseProvider {
   readonly name = "Dollar General Weekly Ad & Digital Deals";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: false,
     opportunities: true,

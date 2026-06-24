@@ -51,6 +51,7 @@ export class LiveHip2SaveProvider extends BaseProvider {
   readonly name = "Hip2Save";
   readonly type = "COUPON_NETWORK" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: false,
     opportunities: true,

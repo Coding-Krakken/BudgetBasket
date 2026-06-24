@@ -70,6 +70,7 @@ export class LiveAldiProvider extends BaseProvider {
   readonly name = "Aldi Weekly Specials";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: true,
     opportunities: true,

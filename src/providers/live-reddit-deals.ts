@@ -121,6 +121,7 @@ export class LiveRedditDealsProvider extends BaseProvider {
   readonly name = "Reddit Deals";
   readonly type = "COUPON_NETWORK" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: false,
     opportunities: true,

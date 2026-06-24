@@ -129,6 +129,7 @@ export class LiveTargetDealsProvider extends BaseProvider {
   readonly name = "Target Weekly Ad & Deals";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: true,
     opportunities: true,

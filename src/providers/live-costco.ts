@@ -172,6 +172,7 @@ export class LiveCostcoProvider extends BaseProvider {
   readonly name = "Costco Member Savings";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: true,
     opportunities: true,

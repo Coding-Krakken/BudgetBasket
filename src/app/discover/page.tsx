@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Tag, Receipt, Star, Zap, TrendingDown, Clock, AlertCircle } from "lucide-react";
+import { Tag, Receipt, Star, Zap, TrendingDown, Clock } from "lucide-react";
 import db from "@/lib/db";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
 
@@ -13,11 +13,13 @@ export const metadata: Metadata = {
   description: "Browse active coupons, rebates, sales, and cashback offers.",
 };
 
+const LIVE_FILTER = { NOT: { providerId: { startsWith: "seed-" } } };
+
 async function getDeals() {
   try {
     const [featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds] = await Promise.all([
       db.opportunity.findMany({
-        where: { isActive: true, isFeatured: true, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
+        where: { isActive: true, isFeatured: true, ...LIVE_FILTER, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
         take: 8,
         orderBy: { confidence: "desc" },
@@ -25,6 +27,7 @@ async function getDeals() {
       db.opportunity.findMany({
         where: {
           isActive: true,
+          ...LIVE_FILTER,
           expiresAt: {
             gte: new Date(),
             lte: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
@@ -35,7 +38,7 @@ async function getDeals() {
         orderBy: { expiresAt: "asc" },
       }),
       db.opportunity.findMany({
-        where: { isActive: true, valueAmount: { gte: 2.0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
+        where: { isActive: true, ...LIVE_FILTER, valueAmount: { gte: 2.0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
         include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
         take: 6,
         orderBy: { valueAmount: "desc" },
@@ -43,6 +46,7 @@ async function getDeals() {
       db.opportunity.findMany({
         where: {
           isActive: true,
+          ...LIVE_FILTER,
           type: { in: ["REBATE", "CASHBACK"] },
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
@@ -53,6 +57,7 @@ async function getDeals() {
       db.opportunity.findMany({
         where: {
           isActive: true,
+          ...LIVE_FILTER,
           type: "MANUFACTURER_COUPON",
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
@@ -63,6 +68,7 @@ async function getDeals() {
       db.opportunity.findMany({
         where: {
           isActive: true,
+          ...LIVE_FILTER,
           type: { in: ["WEEKLY_AD_DEAL", "STORE_SALE"] },
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
@@ -100,7 +106,7 @@ function OppBadgeType({ type }: { type: string }) {
     WEEKLY_AD_DEAL: { label: "Weekly Ad", variant: "warning-muted" },
     BUY_X_GET_Y: { label: "BOGO", variant: "savings-muted" },
   };
-  const c = config[type] ?? { label: type, variant: "demo" as const };
+  const c = config[type] ?? { label: type, variant: "secondary" as const };
   return <Badge variant={c.variant} className="text-[10px]">{c.label}</Badge>;
 }
 
@@ -125,7 +131,7 @@ function DealCard({ opp }: { opp: Opportunity }) {
             </p>
           </div>
           <div className="text-right">
-            <Badge variant="demo" className="text-[10px]">{Math.round(opp.confidence * 100)}% conf.</Badge>
+            <Badge variant="secondary" className="text-[10px]">{Math.round(opp.confidence * 100)}% conf.</Badge>
             {opp.expiresAt && (
               <p className="text-[10px] text-muted-foreground mt-1">{formatRelativeTime(opp.expiresAt)}</p>
             )}
@@ -178,12 +184,6 @@ export default async function DiscoverPage() {
         <p className="text-muted-foreground">
           Browse active offers from stores, coupon networks, and rebate apps.
         </p>
-        <div className="flex items-center gap-2 mt-2">
-          <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
-          <p className="text-xs text-muted-foreground">
-            Demo data — verify all offers before purchasing. Prices and availability may differ.
-          </p>
-        </div>
       </div>
 
       <div className="space-y-10">

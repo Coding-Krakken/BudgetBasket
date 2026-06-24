@@ -74,6 +74,7 @@ export class LiveSamsClubProvider extends BaseProvider {
   readonly name = "Sam's Club Instant Savings";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: true,
     opportunities: true,

@@ -58,6 +58,7 @@ export class LiveOpenFoodFactsProvider extends BaseProvider {
   readonly name = "Open Food Facts";
   readonly type = "RETAILER" as const;
   readonly isDemo = false;
+  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: false,
     opportunities: false,

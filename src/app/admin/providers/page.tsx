@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Settings, CheckCircle2, Clock, AlertCircle, Database, Activity } from "lucide-react";
 import db from "@/lib/db";
 import { getProviderHealthSummary } from "@/providers/registry";
+import { SyncAllButton } from "./sync-button";
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ export default async function AdminProvidersPage() {
         </h1>
         <p className="text-muted-foreground mt-1">Data source health, sync runs, and opportunity distribution.</p>
         <Badge variant="info" className="mt-2">Admin View</Badge>
+        <SyncAllButton />
       </div>
 
       {/* Overview Metrics */}

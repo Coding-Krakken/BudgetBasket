@@ -8,6 +8,9 @@ import {
   Link as LinkIcon, ShoppingCart, Tag, Receipt, Store,
 } from "lucide-react";
 import { getProviderHealthSummary } from "@/providers/registry";
+import { PROVIDER_CREDENTIAL_REQUIREMENTS } from "@/providers/credential-requirements";
+import db from "@/lib/db";
+import { ConfigureDialog } from "./configure-dialog";
 
 export const metadata: Metadata = {
   title: "Integrations",
@@ -43,15 +46,47 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant="destructive" className="text-[10px]"><WifiOff className="h-2.5 w-2.5 mr-0.5" />Offline</Badge>;
 }
 
-export default function IntegrationsPage() {
+export default async function IntegrationsPage() {
   const providers = getProviderHealthSummary();
 
-  const activeCount = providers.filter(p => p.status === "ACTIVE").length;
-  const pendingCount = providers.filter(p => p.status === "PENDING").length;
-  const offlineCount = providers.filter(p => p.status !== "ACTIVE" && p.status !== "PENDING").length;
+  // Load which credentials are configured in DB
+  let storedCreds: { providerId: string; credentialType: string }[] = [];
+  try {
+    storedCreds = await db.providerCredential.findMany({
+      select: { providerId: true, credentialType: true },
+    });
+  } catch {
+    // DB unavailable — fall back to empty
+  }
 
-  const byType: Record<string, typeof providers> = {};
-  for (const p of providers) {
+  const configuredByProvider = new Map<string, string[]>();
+  for (const c of storedCreds) {
+    const list = configuredByProvider.get(c.providerId) ?? [];
+    list.push(c.credentialType);
+    configuredByProvider.set(c.providerId, list);
+  }
+
+  // Enrich providers: OFFLINE → PENDING when all required creds are in DB
+  const enrichedProviders = providers.map(p => {
+    if (p.status === "OFFLINE") {
+      const required = PROVIDER_CREDENTIAL_REQUIREMENTS[p.providerId];
+      if (required) {
+        const configured = configuredByProvider.get(p.providerId) ?? [];
+        const allConfigured = required.every(t => configured.includes(t));
+        if (allConfigured) {
+          return { ...p, status: "PENDING" as const };
+        }
+      }
+    }
+    return p;
+  });
+
+  const activeCount = enrichedProviders.filter(p => p.status === "ACTIVE").length;
+  const pendingCount = enrichedProviders.filter(p => p.status === "PENDING").length;
+  const offlineCount = enrichedProviders.filter(p => p.status !== "ACTIVE" && p.status !== "PENDING").length;
+
+  const byType: Record<string, typeof enrichedProviders> = {};
+  for (const p of enrichedProviders) {
     const key = p.type as string;
     if (!byType[key]) byType[key] = [];
     byType[key].push(p);
@@ -113,35 +148,53 @@ export default function IntegrationsPage() {
                 <h3 className="text-sm font-medium text-muted-foreground">{TYPE_LABELS[type as ProviderType] ?? type}</h3>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
-                {providerList.map(p => (
-                  <Card key={p.providerId} className={p.status !== "ACTIVE" ? "opacity-80" : undefined}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-medium text-sm">{p.providerName}</p>
+                {providerList.map(p => {
+                  const requiredTypes = PROVIDER_CREDENTIAL_REQUIREMENTS[p.providerId];
+                  const configuredTypes = configuredByProvider.get(p.providerId) ?? [];
+
+                  return (
+                    <Card key={p.providerId} className={p.status !== "ACTIVE" ? "opacity-80" : undefined}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-sm">{p.providerName}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              <StatusBadge status={p.status} />
+                              {p.capabilities.prices && <Badge variant="outline" className="text-[10px]">Prices</Badge>}
+                              {p.capabilities.opportunities && <Badge variant="outline" className="text-[10px]">Offers</Badge>}
+                              {p.capabilities.weeklyAds && <Badge variant="outline" className="text-[10px]">Weekly Ads</Badge>}
+                              {p.capabilities.receiptValidation && <Badge variant="outline" className="text-[10px]">Receipts</Badge>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {p.status === "ACTIVE"
+                                ? `${p.itemCount} offers loaded`
+                                : requiredTypes
+                                  ? configuredTypes.length > 0
+                                    ? `${configuredTypes.length}/${requiredTypes.length} credentials configured`
+                                    : "Click Configure to add API credentials"
+                                  : "No credentials required — ready to sync"}
+                            </p>
                           </div>
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            <StatusBadge status={p.status} />
-                            {p.capabilities.prices && <Badge variant="outline" className="text-[10px]">Prices</Badge>}
-                            {p.capabilities.opportunities && <Badge variant="outline" className="text-[10px]">Offers</Badge>}
-                            {p.capabilities.weeklyAds && <Badge variant="outline" className="text-[10px]">Weekly Ads</Badge>}
-                            {p.capabilities.receiptValidation && <Badge variant="outline" className="text-[10px]">Receipts</Badge>}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {p.status === "ACTIVE"
-                              ? `${p.itemCount} offers loaded`
-                              : "Configure credentials in .env to activate"}
-                          </p>
+
+                          {requiredTypes ? (
+                            <ConfigureDialog
+                              providerId={p.providerId}
+                              providerName={p.providerName}
+                              requiredTypes={requiredTypes}
+                              configuredTypes={configuredTypes}
+                            />
+                          ) : p.status === "ACTIVE" ? (
+                            <Badge variant="verified" className="text-[10px] shrink-0">Active</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] shrink-0">Needs Sync</Badge>
+                          )}
                         </div>
-                        <Button variant="outline" size="sm" disabled className="gap-1 text-xs">
-                          <LinkIcon className="h-3 w-3" />
-                          {p.status === "ACTIVE" ? "Connected" : "Configure"}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           );

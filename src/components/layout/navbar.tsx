@@ -56,9 +56,6 @@ export function NavBar() {
             <span className="font-bold text-lg tracking-tight">
               CartWise <span className="text-primary">AI</span>
             </span>
-            <Badge variant="demo" className="hidden sm:inline-flex text-[10px] h-4">
-              Demo
-            </Badge>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">

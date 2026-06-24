@@ -26,6 +26,7 @@ export function getCredentialEnvName(providerId: string, credentialType: Provide
   return `${toEnvProviderPrefix(providerId)}_${CREDENTIAL_ENV_SUFFIX[credentialType]}`;
 }
 
+// Kept for backwards compatibility
 export class EnvCredentialStore implements CredentialStore {
   constructor(private readonly env: Record<string, string | undefined> = process.env) {}
 
@@ -43,7 +44,56 @@ export class EnvCredentialStore implements CredentialStore {
   }
 }
 
-export const credentialStore = new EnvCredentialStore();
+type MinimalDbClient = {
+  providerCredential: {
+    findMany(): Promise<{ providerId: string; credentialType: string; value: string }[]>;
+  };
+};
+
+class CombinedCredentialStore implements CredentialStore {
+  private cache = new Map<string, string>();
+
+  private cacheKey(providerId: string, credentialType: string): string {
+    return `${providerId}:${credentialType}`;
+  }
+
+  getCredential(providerId: string, credentialType: ProviderCredentialType): string | null {
+    const cached = this.cache.get(this.cacheKey(providerId, credentialType));
+    if (cached !== undefined) return cached;
+
+    const envValue = process.env[getCredentialEnvName(providerId, credentialType)];
+    return envValue && envValue.trim().length > 0 ? envValue : null;
+  }
+
+  hasCredentials(providerId: string, credentialTypes: readonly ProviderCredentialType[]): boolean {
+    return this.missingCredentials(providerId, credentialTypes).length === 0;
+  }
+
+  missingCredentials(providerId: string, credentialTypes: readonly ProviderCredentialType[]): ProviderCredentialType[] {
+    return credentialTypes.filter(type => !this.getCredential(providerId, type));
+  }
+
+  setCredential(providerId: string, credentialType: ProviderCredentialType, value: string): void {
+    this.cache.set(this.cacheKey(providerId, credentialType), value);
+  }
+
+  async refreshFromDb(db: MinimalDbClient): Promise<void> {
+    try {
+      const rows = await db.providerCredential.findMany();
+      for (const row of rows) {
+        this.cache.set(this.cacheKey(row.providerId, row.credentialType), row.value);
+      }
+    } catch {
+      // DB may not be available — silently fall back to env vars
+    }
+  }
+}
+
+export const credentialStore = new CombinedCredentialStore();
+
+export async function refreshCredentialCache(db: MinimalDbClient): Promise<void> {
+  await credentialStore.refreshFromDb(db);
+}
 
 export function collectCredentialValues(
   store: CredentialStore,

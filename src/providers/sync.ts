@@ -7,12 +7,13 @@ import {
 import db from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { getAllProviders, getProvider } from "./registry";
+import { refreshCredentialCache } from "./credential-store";
 import type { ProviderFetchResult } from "@/types";
 import type { ProviderOpportunityData, ProviderPriceData } from "./base";
 
 type SyncDbClient = Pick<
   PrismaClient,
-  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity" | "weeklyAdDeal"
+  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity" | "weeklyAdDeal" | "providerCredential"
 >;
 
 export interface ProviderSyncResult {
@@ -29,6 +30,7 @@ export async function syncProviderData(
   options: { database?: SyncDbClient } = {}
 ): Promise<ProviderSyncResult> {
   const database = options.database ?? db;
+  await refreshCredentialCache(database);
   const provider = getProvider(providerId);
 
   if (!provider) {
@@ -315,6 +317,7 @@ export async function syncAllProviderData(
   options: { database?: SyncDbClient; now?: Date } = {}
 ): Promise<ProviderSyncAllResult> {
   const database = options.database ?? db;
+  await refreshCredentialCache(database);
   const startedAt = new Date();
   const expirationSweep = await expireStaleOfferData({ database, now: options.now });
   const providerIds = getAllProviders()

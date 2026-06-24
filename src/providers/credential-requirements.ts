@@ -1,0 +1,53 @@
+import type { ProviderCredentialType } from "./credential-store";
+
+export type { ProviderCredentialType };
+
+export const CREDENTIAL_LABELS: Record<ProviderCredentialType, string> = {
+  api_key: "API Key",
+  client_id: "Client ID",
+  client_secret: "Client Secret",
+  oauth_access_token: "OAuth Access Token",
+};
+
+export const PROVIDER_CREDENTIAL_REQUIREMENTS: Record<string, ProviderCredentialType[]> = {
+  "live-amazon-prime": ["api_key", "client_secret"],
+  "live-awin": ["api_key", "client_id"],
+  "live-catalina": ["client_id", "client_secret"],
+  "live-checkout51": ["api_key"],
+  "live-cj-affiliate": ["api_key", "client_id"],
+  "live-coupon-bureau": ["client_id", "client_secret"],
+  "live-coupons-com": ["api_key"],
+  "live-cvs-extracare": ["client_id", "client_secret"],
+  "live-fetch-rewards": ["api_key"],
+  "live-flashfood": ["api_key"],
+  "live-flexoffers": ["api_key"],
+  "live-general-mills": ["api_key"],
+  "live-goodrx": ["api_key", "client_id"],
+  "live-ibotta": ["api_key"],
+  "live-ibotta-performance": ["client_id", "client_secret"],
+  "live-impact": ["client_id", "client_secret"],
+  "live-inmar": ["client_id", "client_secret"],
+  "live-instacart": ["api_key"],
+  "live-kellanova": ["api_key"],
+  "live-kroger-api": ["client_id", "client_secret"],
+  "live-kroger-digital": ["client_id", "client_secret"],
+  "live-meijer-mperks": ["client_id", "client_secret"],
+  "live-ncr": ["client_id", "client_secret"],
+  "live-pg": ["api_key"],
+  "live-quotient": ["client_id", "client_secret"],
+  "live-rakuten-advertising": ["api_key", "client_id"],
+  "live-rakuten-cashback": ["api_key"],
+  "live-retailmenot": ["api_key"],
+  "live-safeway-loyalty": ["client_id", "client_secret"],
+  "live-shareasale": ["api_key", "client_id", "client_secret"],
+  "live-shopmium": ["api_key"],
+  "live-target-api": ["api_key"],
+  "live-target-circle": ["client_id", "client_secret"],
+  "live-too-good-to-go": ["api_key"],
+  "live-upside": ["api_key"],
+  "live-usda": ["api_key"],
+  "live-valassis": ["client_id", "client_secret"],
+  "live-walgreens-api": ["api_key", "client_id", "client_secret"],
+  "live-walgreens-loyalty": ["client_id", "client_secret"],
+  "live-walmart-api": ["client_id", "client_secret"],
+};

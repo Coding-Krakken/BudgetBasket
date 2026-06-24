@@ -87,7 +87,6 @@ export class LiveFlippProvider extends BaseProvider {
   readonly name = "Flipp Weekly Ads";
   readonly type = "WEEKLY_AD" as const;
   readonly isDemo = false;
-  readonly requiresCredentials = false;
   readonly capabilities: ProviderCapability = {
     prices: true,
     opportunities: true,

@@ -66,14 +66,29 @@ export async function syncProviderData(
     const productIdBySlug = new Map(products.map(product => [product.slug, product.id]));
     const storeIdBySlug = new Map(stores.map(store => [store.slug, store.id]));
 
+    const FETCH_TIMEOUT_MS = 30_000;
+    const timeout = <T>(p: Promise<T>, label: string): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} timed out after 30s`)), FETCH_TIMEOUT_MS)
+        ),
+      ]);
+
     const [priceResult, opportunityResult]: [
       ProviderFetchResult<ProviderPriceData>,
       ProviderFetchResult<ProviderOpportunityData>,
     ] = await Promise.all([
-      provider.capabilities.prices ? provider.fetchPrices(products, stores) : emptyFetchResult<ProviderPriceData>(provider.id),
-      provider.capabilities.opportunities
-        ? provider.fetchOpportunities(products, stores)
-        : emptyFetchResult<ProviderOpportunityData>(provider.id),
+      timeout(
+        provider.capabilities.prices ? provider.fetchPrices(products, stores) : Promise.resolve(emptyFetchResult<ProviderPriceData>(provider.id)),
+        `${provider.id} fetchPrices`
+      ),
+      timeout(
+        provider.capabilities.opportunities
+          ? provider.fetchOpportunities(products, stores)
+          : Promise.resolve(emptyFetchResult<ProviderOpportunityData>(provider.id)),
+        `${provider.id} fetchOpportunities`
+      ),
     ]);
 
     if (!priceResult.success || !opportunityResult.success) {
@@ -303,7 +318,10 @@ export async function syncAllProviderData(
   const startedAt = new Date();
   const expirationSweep = await expireStaleOfferData({ database, now: options.now });
   const providerIds = getAllProviders()
-    .filter(provider => provider.capabilities.prices || provider.capabilities.opportunities)
+    .filter(provider =>
+      !provider.requiresCredentials &&
+      (provider.capabilities.prices || provider.capabilities.opportunities)
+    )
     .map(provider => provider.id);
 
   const results: ProviderSyncResult[] = [];

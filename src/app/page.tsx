@@ -85,7 +85,7 @@ export default async function HomePage() {
           <div className="flex justify-center mb-4">
             <Badge variant="info" className="gap-1.5">
               <Sparkles className="h-3 w-3" />
-              AI-Powered Grocery Savings — Demo Mode
+              AI-Powered Grocery Savings
             </Badge>
           </div>
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl mb-4">
@@ -211,7 +211,7 @@ export default async function HomePage() {
 
                 <div className="flex items-center gap-2 text-xs text-muted-foreground p-3 rounded-lg bg-muted/50">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  Demo data — prices are illustrative. Always verify before purchasing.
+                  Prices sourced live — always verify availability before purchasing.
                 </div>
 
                 <Button className="w-full mt-4" asChild>

@@ -54,7 +54,7 @@ export default function RootLayout({
             <main className="flex-1">{children}</main>
             <footer className="border-t py-6 text-center text-xs text-muted-foreground">
               <p>
-                {APP_NAME} — Demo Mode. Prices and offers are illustrative.{" "}
+                {APP_NAME} — Deals sourced live from providers.{" "}
                 <span className="font-medium text-primary">Always verify before purchasing.</span>
               </p>
             </footer>

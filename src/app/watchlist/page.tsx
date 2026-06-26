@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Bell, BellOff, Trash2, Loader2, TrendingDown, Package } from "lucide-react";
+import { Bell, BellOff, Trash2, Loader2, TrendingDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProductImage } from "@/components/ui/product-image";
 import { formatCurrency } from "@/lib/utils";
 
 interface PriceAlert {
@@ -130,9 +131,13 @@ export default function WatchlistPage() {
             return (
               <Card key={alert.id} className={targetMet ? "border-emerald-300 bg-emerald-50/30" : ""}>
                 <CardContent className="p-4 flex items-start gap-4">
-                  <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                  </div>
+                  <ProductImage
+                    imageUrl={alert.product.imageUrl}
+                    name={alert.product.name}
+                    categorySlug={alert.product.category?.slug}
+                    size={40}
+                    className="rounded-lg shrink-0"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>

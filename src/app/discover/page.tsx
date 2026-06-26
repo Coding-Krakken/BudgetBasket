@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tag, Receipt, Star, Zap, TrendingDown, Clock } from "lucide-react";
 import db from "@/lib/db";
 import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { ProductImage } from "@/components/ui/product-image";
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ async function getDeals() {
       // Featured: highest-confidence deals with meaningful value
       db.opportunity.findMany({
         where: { isActive: true, ...LIVE_FILTER, confidence: { gte: 0.65 }, valueAmount: { gt: 0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
-        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
         take: 8,
         orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
@@ -35,14 +36,14 @@ async function getDeals() {
             lte: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
           },
         },
-        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
         take: 8,
         orderBy: { expiresAt: "asc" },
       }),
       // High Value: any deal with $2+ off
       db.opportunity.findMany({
         where: { isActive: true, ...LIVE_FILTER, valueAmount: { gte: 2.0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
-        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
         take: 8,
         orderBy: { valueAmount: "desc" },
       }),
@@ -54,7 +55,7 @@ async function getDeals() {
           type: { in: ["REBATE", "CASHBACK"] },
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
-        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
         take: 8,
         orderBy: [{ valueAmount: "desc" }, { confidence: "desc" }],
       }),
@@ -66,7 +67,7 @@ async function getDeals() {
           type: { in: ["MANUFACTURER_COUPON", "DIGITAL_COUPON"] },
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
-        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
         take: 8,
         orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
@@ -78,7 +79,7 @@ async function getDeals() {
           type: { in: ["WEEKLY_AD_DEAL", "STORE_SALE"] },
           OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
         },
-        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, category: { select: { name: true } } } } },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
         take: 12,
         orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
@@ -122,7 +123,16 @@ function DealCard({ opp }: { opp: Opportunity }) {
     <Card className="hover:shadow-md transition-shadow h-full flex flex-col">
       <CardHeader className="pb-2 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-sm leading-snug">{opp.title}</CardTitle>
+          <div className="flex items-start gap-2 min-w-0">
+            <ProductImage
+              imageUrl={opp.product?.imageUrl}
+              name={opp.product?.name ?? opp.title}
+              categorySlug={opp.product?.category?.slug}
+              size={32}
+              className="shrink-0 mt-0.5"
+            />
+            <CardTitle className="text-sm leading-snug">{opp.title}</CardTitle>
+          </div>
           <OppBadgeType type={opp.type} />
         </div>
         {opp.description && (

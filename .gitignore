@@ -24,6 +24,9 @@ coverage/
 playwright-report/
 test-results/
 
+# Database backups (local script output — backed up via CI artifacts, not git)
+backups/
+
 # Misc
 .DS_Store
 *.pem

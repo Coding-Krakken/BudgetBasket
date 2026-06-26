@@ -170,6 +170,23 @@ After deploying:
 
 ---
 
+## Staging Environment (INFRA-01)
+
+The `budgetbasket` Vercel project is connected to the `Coding-Krakken/BudgetBasket` GitHub repo, which gives every PR an automatic, isolated preview deployment and auto-deploys `main` to production — no extra workflow needed for that part, it's Vercel's standard GitHub integration behavior.
+
+| Environment | Trigger | Database | URL |
+|---|---|---|---|
+| Production | push/merge to `main` | dedicated `budgetbasket` database | `https://budgetbasket-two.vercel.app` |
+| Preview ("staging") | every open PR | dedicated `budgetbasket_staging` database | unique per-PR URL, posted as a PR comment by the Vercel bot |
+
+**Database isolation:** Production and Preview point at two separate Postgres databases within the same Neon project — `budgetbasket` and `budgetbasket_staging` respectively (`DATABASE_URL` / `DATABASE_URL_UNPOOLED`, set per-environment in Vercel Project Settings → Environment Variables). This means PR previews can never read or write production data.
+
+> **Found and fixed while building this feature (2026-06-26):** this Vercel project's Neon integration was shared with an unrelated project (`cnyfamilybike`), and both Production and Preview were pointed at that same shared `neondb` database, which held the *other* project's tables, not CartWise's. The dedicated `budgetbasket` and `budgetbasket_staging` databases were created within the same Neon project to fix this, and Production/Preview env vars were repointed accordingly. If you provision a fresh Neon project for this app in the future, migrate to that and decommission this workaround.
+
+**Feature flags:** `src/lib/feature-flags.ts` provides `isFeatureEnabled(flag)`, which defaults a flag **on** in Preview/development and **off** in production unless explicitly overridden via a `NEXT_PUBLIC_FEATURE_<FLAG>=true` env var. This lets unreleased features get exercised on every PR preview without a separate release step.
+
+---
+
 ## Docker Compose Deployment (Self-Hosted / Staging)
 
 Docker Compose provides a complete self-contained environment with PostgreSQL, pgAdmin, and the Next.js application.
@@ -250,6 +267,9 @@ Navigate to `http://localhost:8080`:
 | `NEXT_PUBLIC_APP_NAME` | App display name shown in UI and health endpoint | `CartWise AI` |
 | `NEXT_PUBLIC_APP_VERSION` | Version string | `0.1.0` |
 | `NODE_ENV` | `development` or `production` | Set by Next.js automatically |
+| `DATABASE_URL_UNPOOLED` | Direct (non-pgbouncer) connection string, used by backup/restore scripts | Falls back to `DATABASE_URL` |
+| `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | Sentry error monitoring (server/client) — see [RUNBOOK.md](./RUNBOOK.md) | Disabled (no-op) if unset |
+| `NEXT_PUBLIC_APP_ENV` | Overrides environment detection for Sentry tagging and feature flags | Falls back to `VERCEL_ENV` / `NODE_ENV` |
 
 ### Planned (V1+)
 

@@ -314,4 +314,19 @@ E2e tests run on merge to main against the staging deployment.
 | `app/api/optimize` | 80%+ |
 | UI components | Not targeted (V2) |
 
+---
+
+## Visual Regression Testing
+
+`tests/e2e/visual.spec.ts` takes a full-page screenshot of every top-level page (home, plan, discover, pantry, integrations, profile, watchlist, notifications, help) and diffs it against a committed baseline, on both the desktop (`chromium`) and `mobile-chrome` Playwright projects. This runs as the `visual-regression` job in CI on every PR (`.github/workflows/ci.yml`) and posts a pass/fail comment; on failure, the diff report is uploaded as the `visual-regression-report` artifact.
+
+A 3% `maxDiffPixelRatio` tolerance absorbs minor anti-aliasing differences between machines. Pages with highly dynamic content (live deal counts, relative timestamps) may occasionally need a deliberate re-baseline even without a real regression — that's expected, not a bug.
+
+**Updating baselines after an intentional UI change:**
+
+1. Run the app locally against a seeded database (`npm run dev`).
+2. Regenerate the baselines: `PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test visual.spec.ts --update-snapshots`.
+3. Review the diff: `git diff --stat tests/e2e/visual.spec.ts-snapshots/` and open a couple of the changed PNGs to confirm the change is the one you intended and nothing else moved.
+4. Commit the updated `.png` files alongside the code change that caused them, in the same PR — never update baselines in an unrelated PR.
+
 Coverage is tracked via `npx vitest run --coverage` (v8 provider). Coverage gates are not enforced in CI for the MVP — this is aspirational for V1.

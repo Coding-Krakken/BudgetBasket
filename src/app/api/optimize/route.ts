@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import db from "@/lib/db";
 import { parseShoppingList } from "@/engine/parser";
 import { createOptimizationResult, generateScenarios, getEligibilityTrace } from "@/engine/optimizer";
@@ -140,7 +141,10 @@ export async function POST(request: NextRequest) {
       preferences,
     };
 
-    const scenarios = await generateScenarios(optimizeInput);
+    const scenarios = await Sentry.startSpan(
+      { name: "optimize.generateScenarios", op: "function", attributes: { itemCount: parsedItems.length, mode } },
+      () => generateScenarios(optimizeInput)
+    );
 
     const result = createOptimizationResult(
       shoppingList,

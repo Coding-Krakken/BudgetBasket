@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 import { NavBar } from "@/components/layout/navbar";
 import { Toaster } from "@/components/ui/toaster";
@@ -56,6 +57,11 @@ export default function RootLayout({
               <p>
                 {APP_NAME} — Deals sourced live from providers.{" "}
                 <span className="font-medium text-primary">Always verify before purchasing.</span>
+              </p>
+              <p className="mt-1">
+                <Link href="/help" className="underline hover:text-foreground">
+                  Help &amp; FAQ
+                </Link>
               </p>
             </footer>
           </div>

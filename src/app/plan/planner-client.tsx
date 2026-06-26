@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AutocompleteInput } from "@/components/ui/autocomplete-input";
+import { ProductImage } from "@/components/ui/product-image";
 import { formatCurrency, formatPercent, formatRelativeTime, cn } from "@/lib/utils";
 import {
   CONFIDENCE_DESCRIPTIONS,
@@ -853,24 +854,33 @@ function CartItemRow({
         )}
         onClick={hasDetails ? onToggle : undefined}
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm">
-              {item.product?.name ?? item.raw}
-            </span>
-            {item.quantity > 1 && (
-              <span className="text-xs text-muted-foreground shrink-0">×{item.quantity}</span>
+        <div className="flex-1 min-w-0 flex items-center gap-2.5">
+          <ProductImage
+            imageUrl={item.product?.imageUrl}
+            name={item.product?.name ?? item.raw}
+            categorySlug={item.product?.category?.slug}
+            size={32}
+            className="shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-sm">
+                {item.product?.name ?? item.raw}
+              </span>
+              {item.quantity > 1 && (
+                <span className="text-xs text-muted-foreground shrink-0">×{item.quantity}</span>
+              )}
+            </div>
+            {item.appliedOpportunities.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {item.appliedOpportunities.slice(0, 2).map((ao, i) => (
+                  <Badge key={i} variant={ao.isFutureValue ? "info" : "savings-muted"} className="text-[10px]">
+                    {ao.isFutureValue ? "+" : "-"}{formatCurrency(ao.savingsAmount)} {ao.isFutureValue ? "future" : ""}
+                  </Badge>
+                ))}
+              </div>
             )}
           </div>
-          {item.appliedOpportunities.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1">
-              {item.appliedOpportunities.slice(0, 2).map((ao, i) => (
-                <Badge key={i} variant={ao.isFutureValue ? "info" : "savings-muted"} className="text-[10px]">
-                  {ao.isFutureValue ? "+" : "-"}{formatCurrency(ao.savingsAmount)} {ao.isFutureValue ? "future" : ""}
-                </Badge>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

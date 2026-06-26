@@ -11,6 +11,7 @@ import {
   ShoppingCart, TrendingDown, Store, CheckCircle2,
   AlertCircle, Clock, Package, Share2,
 } from "lucide-react";
+import { ProductImage } from "@/components/ui/product-image";
 
 export const metadata: Metadata = {
   title: "Shared Shopping Plan",
@@ -211,15 +212,19 @@ export default async function SharedPlanPage({
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y">
-            {plan.items.map((item, idx) => (
+            {plan.items.map((item) => (
               <div
                 key={item.id}
                 className="px-4 py-3 flex items-center justify-between gap-3"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                    {idx + 1}
-                  </div>
+                  <ProductImage
+                    imageUrl={item.product?.imageUrl}
+                    name={item.product?.name ?? item.rawInput}
+                    categorySlug={item.product?.category?.slug}
+                    size={36}
+                    className="shrink-0"
+                  />
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">
                       {item.product?.name ?? item.rawInput}

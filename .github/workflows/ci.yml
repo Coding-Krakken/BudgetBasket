@@ -70,6 +70,84 @@ jobs:
         env:
           NODE_ENV: production
 
+  visual-regression:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: cartwise_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/cartwise_test
+      NEXT_PUBLIC_APP_NAME: CartWise AI Test
+      NODE_ENV: production
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply database schema
+        run: npx prisma db push
+
+      - name: Seed database
+        run: npm run db:seed
+
+      - name: Build
+        run: npm run build
+
+      - name: Run visual regression tests
+        run: npx playwright test visual.spec.ts
+
+      - name: Upload visual diff report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Comment on PR with result
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const conclusion = "${{ job.status }}" === "success" ? "✅ passed" : "❌ failed — see the `visual-regression-report` artifact for diffs";
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Visual regression tests ${conclusion}.`,
+            });
+
   docker-build:
     name: Docker Build Check
     runs-on: ubuntu-latest

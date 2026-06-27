@@ -8,12 +8,20 @@ import db from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { getAllProviders, getProvider } from "./registry";
 import { refreshCredentialCache } from "./credential-store";
+import { PROVIDER_CREDENTIAL_REQUIREMENTS } from "./credential-requirements";
 import type { ProviderFetchResult } from "@/types";
 import type { ProviderOpportunityData, ProviderPriceData } from "./base";
 
 type SyncDbClient = Pick<
   PrismaClient,
-  "providerSyncRun" | "product" | "store" | "priceObservation" | "opportunity" | "weeklyAdDeal" | "providerCredential"
+  | "providerSyncRun"
+  | "product"
+  | "store"
+  | "priceObservation"
+  | "opportunity"
+  | "weeklyAdDeal"
+  | "providerCredential"
+  | "providerConnection"
 >;
 
 export interface ProviderSyncResult {
@@ -320,11 +328,33 @@ export async function syncAllProviderData(
   await refreshCredentialCache(database);
   const startedAt = new Date();
   const expirationSweep = await expireStaleOfferData({ database, now: options.now });
+  const [credentialRows, connectedRows] = await Promise.all([
+    database.providerCredential.findMany({ select: { providerId: true, credentialType: true } }),
+    database.providerConnection.findMany({
+      where: { status: "CONNECTED" },
+      select: { providerId: true },
+      distinct: ["providerId"],
+    }),
+  ]);
+  const credentialsByProvider = new Map<string, Set<string>>();
+  for (const row of credentialRows) {
+    const credentialTypes = credentialsByProvider.get(row.providerId) ?? new Set<string>();
+    credentialTypes.add(row.credentialType);
+    credentialsByProvider.set(row.providerId, credentialTypes);
+  }
+  const connectedProviderIds = new Set(connectedRows.map(row => row.providerId));
+
   const providerIds = getAllProviders()
-    .filter(provider =>
-      !provider.requiresCredentials &&
-      (provider.capabilities.prices || provider.capabilities.opportunities)
-    )
+    .filter(provider => {
+      if (!provider.capabilities.prices && !provider.capabilities.opportunities) return false;
+      if (!provider.requiresCredentials) return true;
+
+      const requiredCredentials = PROVIDER_CREDENTIAL_REQUIREMENTS[provider.id] ?? [];
+      const configuredCredentials = credentialsByProvider.get(provider.id) ?? new Set<string>();
+      const hasCredentials = requiredCredentials.length > 0 &&
+        requiredCredentials.every(type => configuredCredentials.has(type));
+      return hasCredentials && connectedProviderIds.has(provider.id);
+    })
     .map(provider => provider.id);
 
   const results: ProviderSyncResult[] = [];

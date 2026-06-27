@@ -67,7 +67,7 @@ async function fetchOffers(apiKey: string | null): Promise<{ offers: Checkout51O
   }
 
   let data: Checkout51Response | null = null
-  let isAuthenticated = !!apiKey
+  const isAuthenticated = !!apiKey
 
   for (const endpoint of [PUBLIC_ENDPOINT, FALLBACK_ENDPOINT]) {
     try {

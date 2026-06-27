@@ -19,6 +19,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:import-products": "tsx scripts/import-products.ts",
+    "db:encrypt-provider-tokens": "tsx scripts/encrypt-provider-tokens.ts",
     "db:backup": "bash scripts/backup-database.sh",
     "db:restore": "bash scripts/restore-database.sh",
     "db:reset": "prisma migrate reset --force && npm run db:seed",

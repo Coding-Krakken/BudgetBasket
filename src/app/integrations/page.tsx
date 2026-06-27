@@ -1,7 +1,6 @@
 import { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   PlugZap, CheckCircle2, Clock, AlertCircle, WifiOff,
@@ -9,8 +8,10 @@ import {
 } from "lucide-react";
 import { getProviderHealthSummary } from "@/providers/registry";
 import { PROVIDER_CREDENTIAL_REQUIREMENTS } from "@/providers/credential-requirements";
+import { OAUTH_PROVIDERS } from "@/lib/provider-oauth";
 import db from "@/lib/db";
 import { ConfigureDialog } from "./configure-dialog";
+import { ConnectionAction } from "./connection-action";
 
 export const metadata: Metadata = {
   title: "Integrations",
@@ -48,13 +49,35 @@ function StatusBadge({ status }: { status: string }) {
 
 export default async function IntegrationsPage() {
   const providers = getProviderHealthSummary();
+  const demoUserId = process.env.DEMO_USER_ID ?? "demo-user";
 
   // Load which credentials are configured in DB
   let storedCreds: { providerId: string; credentialType: string }[] = [];
+  let providerConnections: {
+    providerId: string;
+    status: string;
+    accountEmail: string | null;
+    accountId: string | null;
+    lastSyncedAt: Date | null;
+    syncError: string | null;
+  }[] = [];
   try {
-    storedCreds = await db.providerCredential.findMany({
-      select: { providerId: true, credentialType: true },
-    });
+    [storedCreds, providerConnections] = await Promise.all([
+      db.providerCredential.findMany({
+        select: { providerId: true, credentialType: true },
+      }),
+      db.providerConnection.findMany({
+        where: { userId: demoUserId },
+        select: {
+          providerId: true,
+          status: true,
+          accountEmail: true,
+          accountId: true,
+          lastSyncedAt: true,
+          syncError: true,
+        },
+      }),
+    ]);
   } catch {
     // DB unavailable — fall back to empty
   }
@@ -65,6 +88,7 @@ export default async function IntegrationsPage() {
     list.push(c.credentialType);
     configuredByProvider.set(c.providerId, list);
   }
+  const connectionByProvider = new Map(providerConnections.map(connection => [connection.providerId, connection]));
 
   // Enrich providers: OFFLINE → PENDING when all required creds are in DB
   const enrichedProviders = providers.map(p => {
@@ -133,6 +157,54 @@ export default async function IntegrationsPage() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <LinkIcon className="h-4 w-4 text-primary" />
+            Account Connections
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Link loyalty accounts for personalized offers, digital coupons, and account-specific savings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid sm:grid-cols-2 gap-3">
+          {Object.values(OAUTH_PROVIDERS).map(provider => {
+            const connection = connectionByProvider.get(provider.providerId);
+            const required = PROVIDER_CREDENTIAL_REQUIREMENTS[provider.providerId] ?? [];
+            const configured = configuredByProvider.get(provider.providerId) ?? [];
+            const ready = required.every(type => configured.includes(type));
+
+            return (
+              <div key={provider.providerId} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">{provider.providerName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {connection?.status === "CONNECTED"
+                      ? `Connected${connection.accountEmail ? ` as ${connection.accountEmail}` : ""}`
+                      : ready
+                        ? "Ready to connect with OAuth"
+                        : "Configure client credentials first"}
+                  </p>
+                  {connection?.lastSyncedAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Last synced {connection.lastSyncedAt.toLocaleString()}
+                    </p>
+                  )}
+                  {connection?.syncError && (
+                    <p className="text-xs text-destructive mt-1">{connection.syncError}</p>
+                  )}
+                </div>
+                {ready ? (
+                  <ConnectionAction providerId={provider.providerId} userId={demoUserId} status={connection?.status} />
+                ) : (
+                  <Badge variant="outline" className="text-[10px] shrink-0">Needs Setup</Badge>
+                )}
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 

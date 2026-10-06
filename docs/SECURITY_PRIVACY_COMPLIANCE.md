@@ -66,7 +66,7 @@ When users link a store account (Kroger, Target, etc.):
 5. Tokens are stored encrypted in the `ProviderConnection` table
 6. CartWise uses the access token only to fetch prices and personalized offers on the user's behalf
 
-**Token encryption:** Access and refresh tokens are encrypted using AES-256 before storage, with the encryption key stored separately from the database (environment variable). This ensures database-level access does not expose tokens in plaintext.
+**Token encryption:** Access and refresh tokens are encrypted using AES-256-GCM before storage, with key material derived from `APP_SECRET` outside the database. This ensures database-level access does not expose tokens in plaintext. After deploying account linking, run `npm run db:encrypt-provider-tokens` once to rotate any legacy plaintext `ProviderConnection` rows.
 
 **Token revocation:** Users can disconnect a provider at any time via the integrations UI. CartWise deletes the stored tokens and revokes the OAuth session with the provider where the API supports it.
 
@@ -203,7 +203,7 @@ The following controls are identified for implementation in preparation for a SO
 | Control | Status | Target Phase |
 |---|---|---|
 | Secrets management (vault or KMS) | Partial (env vars) | V2 |
-| Token encryption at rest | Planned | V2 |
+| Token encryption at rest | Implemented | V2 |
 | Audit log immutability | Partial (write-only app layer) | V2 |
 | TLS 1.2+ enforcement | Vercel default | Current |
 | Rate limiting | Planned | V1 |

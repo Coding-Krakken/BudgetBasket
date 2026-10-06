@@ -102,8 +102,7 @@ export class LiveSlickdealsProvider extends BaseProvider {
           valueAmount = percentOff / 100;
           valuePercent = percentOff;
         } else {
-          valueType = "FLAT_DISCOUNT";
-          valueAmount = 0;
+          return [];
         }
 
         return [{

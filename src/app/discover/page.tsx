@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tag, Receipt, Star, Zap, TrendingDown, Clock } from "lucide-react";
 import db from "@/lib/db";
-import { formatCurrency, formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/utils";
 import { ProductImage } from "@/components/ui/product-image";
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,31 @@ const LIVE_FILTER = { NOT: { providerId: { startsWith: "seed-" } } };
 
 async function getDeals() {
   try {
-    const [featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds] = await Promise.all([
+    const [yourOffers, featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds] = await Promise.all([
+      // Personalized connected-account offers
+      db.opportunity.findMany({
+        where: {
+          isActive: true,
+          ...LIVE_FILTER,
+          AND: [
+            {
+              OR: [
+                { requiresAccount: true },
+                { confidenceLevel: "CONNECTED_ACCOUNT" },
+              ],
+            },
+            {
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gte: new Date() } },
+              ],
+            },
+          ],
+        },
+        include: { store: { select: { slug: true, name: true } }, product: { select: { name: true, imageUrl: true, category: { select: { name: true, slug: true } } } } },
+        take: 8,
+        orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
+      }),
       // Featured: highest-confidence deals with meaningful value
       db.opportunity.findMany({
         where: { isActive: true, ...LIVE_FILTER, confidence: { gte: 0.65 }, valueAmount: { gt: 0 }, OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },
@@ -84,9 +108,9 @@ async function getDeals() {
         orderBy: [{ confidence: "desc" }, { valueAmount: "desc" }],
       }),
     ]);
-    return { featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds };
+    return { yourOffers, featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds };
   } catch {
-    return { featured: [], expiringSoon: [], highValue: [], rebates: [], mfgCoupons: [], weeklyAds: [] };
+    return { yourOffers: [], featured: [], expiringSoon: [], highValue: [], rebates: [], mfgCoupons: [], weeklyAds: [] };
   }
 }
 
@@ -161,6 +185,12 @@ function DealCard({ opp }: { opp: Opportunity }) {
           {opp.requiresLoyaltyCard && (
             <Badge variant="outline" className="text-[10px]"><Star className="h-2.5 w-2.5 mr-0.5" />Card</Badge>
           )}
+          {opp.requiresAccount && (
+            <Badge variant="verified" className="text-[10px]">Your offer</Badge>
+          )}
+          {!opp.requiresAccount && opp.confidenceLevel !== "CONNECTED_ACCOUNT" && (
+            <Badge variant="outline" className="text-[10px]">Public offer</Badge>
+          )}
           {opp.requiresReceipt && (
             <Badge variant="outline" className="text-[10px]"><Receipt className="h-2.5 w-2.5 mr-0.5" />Receipt</Badge>
           )}
@@ -192,7 +222,7 @@ function Section({ title, icon: Icon, deals, emptyMsg }: { title: string; icon: 
 }
 
 export default async function DiscoverPage() {
-  const { featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds } = await getDeals();
+  const { yourOffers, featured, expiringSoon, highValue, rebates, mfgCoupons, weeklyAds } = await getDeals();
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -204,6 +234,8 @@ export default async function DiscoverPage() {
       </div>
 
       <div className="space-y-10">
+        <Section title="Your Offers" icon={Star} deals={yourOffers} emptyMsg="Connect a loyalty account to see personalized offers here." />
+        <Separator />
         <Section title="Featured Deals" icon={Zap} deals={featured} emptyMsg="No featured deals right now." />
         <Separator />
         <Section title="Expiring Soon" icon={Clock} deals={expiringSoon} emptyMsg="No deals expiring soon." />

@@ -181,13 +181,12 @@ export class LiveWalgreensApiProvider extends BaseProvider {
       for (const offer of offers) {
         const title = offer.title ?? offer.brand ?? "Walgreens offer";
 
-        let productSlug: string | undefined;
         // Try UPC list name matching first, then fall back to title matching
         const matchedByTitle = matchProduct(
           title,
           productsWithNorm as Pick<Product, "id" | "slug" | "name" | "normalizedName">[]
         );
-        productSlug = matchedByTitle?.slug;
+        const productSlug = matchedByTitle?.slug;
 
         const isDigital = offer.isDigital ?? offer.couponType?.toLowerCase().includes("digital") ?? false;
         const type = isDigital ? "DIGITAL_COUPON" : "STORE_COUPON";

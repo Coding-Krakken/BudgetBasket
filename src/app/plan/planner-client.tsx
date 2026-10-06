@@ -944,7 +944,10 @@ function CartItemRow({
               {item.appliedOpportunities.map((ao, i) => (
                 <div key={i} className="flex items-start justify-between gap-2 text-xs">
                   <div className="flex-1">
-                    <p className="font-medium">{ao.opportunity?.title ?? "Offer"}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-medium">{ao.opportunity?.title ?? "Offer"}</p>
+                      {ao.opportunity && <OfferAudienceBadge opportunity={ao.opportunity} />}
+                    </div>
                     {ao.requiresAction && ao.actionDescription && (() => {
                       const action = buildTrackedAction(item, ao, i);
                       return (
@@ -981,6 +984,15 @@ function CartItemRow({
         </div>
       )}
     </div>
+  );
+}
+
+function OfferAudienceBadge({ opportunity }: { opportunity: CartPlanItem["appliedOpportunities"][number]["opportunity"] }) {
+  const isPersonalized = opportunity.requiresAccount || opportunity.confidenceLevel === "CONNECTED_ACCOUNT";
+  return (
+    <Badge variant={isPersonalized ? "verified" : "outline"} className="text-[10px]">
+      {isPersonalized ? "Your offer" : "Public offer"}
+    </Badge>
   );
 }
 

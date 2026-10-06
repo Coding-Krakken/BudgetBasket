@@ -4,6 +4,7 @@ import type { Product, Store } from "@prisma/client"
 import { credentialStore } from "./credential-store"
 import { providerCache } from "./cache"
 import db from "@/lib/db"
+import { decryptProviderToken, encryptProviderToken } from "@/lib/token-encryption"
 
 const TOKEN_ENDPOINT = "https://api.kroger.com/v1/connect/oauth2/token";
 const COUPONS_ENDPOINT = "https://api.kroger.com/v1/coupons?filter.status=clipped,available";
@@ -70,13 +71,12 @@ export class LiveKrogerDigitalProvider extends BaseProvider {
     receiptValidation: false,
   };
 
-  private readonly clientId: string | null;
-  private readonly clientSecret: string | null;
+  private get clientId(): string | null {
+    return credentialStore.getCredential(this.id, "client_id");
+  }
 
-  constructor() {
-    super();
-    this.clientId = credentialStore.getCredential(this.id, "client_id");
-    this.clientSecret = credentialStore.getCredential(this.id, "client_secret");
+  private get clientSecret(): string | null {
+    return credentialStore.getCredential(this.id, "client_secret");
   }
 
   private async getConnectedUsers(): Promise<ProviderConnectionRow[]> {
@@ -86,25 +86,27 @@ export class LiveKrogerDigitalProvider extends BaseProvider {
   }
 
   private async refreshToken(conn: { id: string; refreshToken: string | null }): Promise<string | null> {
-    if (!conn.refreshToken || !this.clientId || !this.clientSecret) return null;
+    const refreshToken = decryptProviderToken(conn.refreshToken);
+    if (!refreshToken || !this.clientId || !this.clientSecret) return null;
     try {
       const res = await fetch(TOKEN_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          refresh_token: conn.refreshToken,
+          refresh_token: refreshToken,
           client_id: this.clientId,
           client_secret: this.clientSecret,
         }),
       });
       if (!res.ok) return null;
-      const data = await res.json() as { access_token?: string; expires_in?: number };
+      const data = await res.json() as { access_token?: string; expires_in?: number; refresh_token?: string };
       if (!data.access_token) return null;
       await db.providerConnection.update({
         where: { id: conn.id },
         data: {
-          accessToken: data.access_token,
+          accessToken: encryptProviderToken(data.access_token),
+          ...(data.refresh_token ? { refreshToken: encryptProviderToken(data.refresh_token) } : {}),
           tokenExpiresAt: new Date(Date.now() + (data.expires_in ?? 3600) * 1000),
           lastSyncedAt: new Date(),
           syncError: null,
@@ -174,7 +176,7 @@ export class LiveKrogerDigitalProvider extends BaseProvider {
 
     for (const conn of connections) {
       try {
-        let token = conn.accessToken;
+        let token = decryptProviderToken(conn.accessToken);
         if (!token || (conn.tokenExpiresAt && conn.tokenExpiresAt < new Date())) {
           token = await this.refreshToken(conn);
           if (!token) {
@@ -223,7 +225,7 @@ export class LiveKrogerDigitalProvider extends BaseProvider {
 
     // Use the first connected user's token for personalized prices
     const conn = connections[0];
-    let token = conn.accessToken;
+    let token = decryptProviderToken(conn.accessToken);
     if (!token || (conn.tokenExpiresAt && conn.tokenExpiresAt < new Date())) {
       token = await this.refreshToken(conn);
       if (!token) {

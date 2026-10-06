@@ -1,26 +1,26 @@
 name: ForgeCI Self-Hosted CI Pipeline
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
     paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.vscode/**'
-      - '.claude/**'
-      - 'LICENSE'
+      - "**.md"
+      - "docs/**"
+      - ".vscode/**"
+      - ".claude/**"
+      - "LICENSE"
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
     paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.vscode/**'
-      - '.claude/**'
-      - 'LICENSE'
+      - "**.md"
+      - "docs/**"
+      - ".vscode/**"
+      - ".claude/**"
+      - "LICENSE"
 
 jobs:
   quality:
     name: Lint, Typecheck, Test & Build
-    runs-on: [ linux, amd64, docker ]
+    runs-on: [linux, amd64, docker]
     services:
       postgres:
         image: postgres:16-alpine

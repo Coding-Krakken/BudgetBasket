@@ -2,8 +2,20 @@ name: ForgeCI Self-Hosted CI Pipeline
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.vscode/**'
+      - '.claude/**'
+      - 'LICENSE'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.vscode/**'
+      - '.claude/**'
+      - 'LICENSE'
 
 jobs:
   quality:
@@ -33,7 +45,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Generate Prisma Client
         run: npx prisma generate
